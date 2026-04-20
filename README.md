@@ -42,6 +42,11 @@ cd MasterHttpRelayVPN
 pip install -r requirements.txt
 ```
 
+> **Can't reach PyPI directly?** Use this mirror instead:
+> ```bash
+> pip install -r requirements.txt -i https://mirror-pypi.runflare.com/simple/ --trusted-host mirror-pypi.runflare.com
+> ```
+
 Or download the ZIP from [GitHub](https://github.com/masterking32/MasterHttpRelayVPN/tree/python_testing) and extract it.
 
 ### Step 2: Set Up the Google Relay (Code.gs)
@@ -255,9 +260,12 @@ python main.py -c /path/to/config.json  # Use a different config file
 |---------|----------|
 | "Config not found" | Copy `config.example.json` to `config.json` and fill in your values |
 | Browser shows certificate errors | Install the CA certificate (see Step 6 above) |
+| Telegram works but browser doesn't load sites | Almost certainly the CA certificate is not installed. Follow Step 6 to install `ca/ca.crt`, then **fully close and reopen your browser** (for Chrome/Edge, make sure no Chrome process is running in the background before reopening). |
+| Installed the cert but browser still errors | Chrome and Edge cache certificates — you must **completely close** the browser (check Task Manager / system tray) and reopen it for the new cert to take effect. Firefox requires a separate import (see Step 6 Firefox section). |
 | "unauthorized" error | Make sure `auth_key` in `config.json` matches `AUTH_KEY` in `Code.gs` exactly |
 | Connection timeout | Try a different `google_ip` or check your internet connection |
 | Slow browsing | Deploy multiple `Code.gs` copies and use `script_ids` array for load balancing |
+| `502 Bad JSON` error | Google returned an unexpected response (HTML instead of JSON). Causes: wrong `script_id`, Apps Script daily quota exhausted, or the deployment wasn't re-created after editing `Code.gs`. Check your `script_id` and create a **new deployment** if you recently changed `Code.gs`. |
 
 ---
 

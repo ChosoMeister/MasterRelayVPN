@@ -36,6 +36,11 @@ cd MasterHttpRelayVPN
 pip install -r requirements.txt
 ```
 
+> **دسترسی به PyPI ندارید؟** از این mirror استفاده کنید:
+> ```bash
+> pip install -r requirements.txt -i https://mirror-pypi.runflare.com/simple/ --trusted-host mirror-pypi.runflare.com
+> ```
+
 اگر نخواستید با Git کار کنید، می‌توانید فایل ZIP پروژه را از GitHub دانلود و extract کنید.
 
 ### مرحله 2: راه‌اندازی رله Google با `Code.gs`
@@ -240,10 +245,13 @@ python main.py -c /path/to/config.json
 | مشکل | راه‌حل |
 |------|--------|
 | `Config not found` | فایل `config.example.json` را به `config.json` کپی کنید |
-| خطای certificate در مرورگر | گواهی CA را نصب کنید |
+| خطای certificate در مرورگر | گواهی CA را نصب کنید (مرحله ۶) |
+| تلگرام کار می‌کند ولی مرورگر سایت‌ها را باز نمی‌کند | تقریباً مطمئناً گواهی CA نصب نشده. مرحله ۶ را دنبال کنید، سپس مرورگر را **کاملاً ببندید و دوباره باز کنید** (برای Chrome/Edge مطمئن شوید هیچ پروسه Chrome در پس‌زمینه باز نیست). |
+| گواهی نصب شد ولی مرورگر هنوز خطا می‌دهد | Chrome و Edge گواهی‌ها را cache می‌کنند — باید مرورگر را **کاملاً ببندید** (Task Manager یا system tray را چک کنید) و دوباره باز کنید. Firefox نیاز به import جداگانه دارد (بخش Firefox در مرحله ۶). |
 | خطای `unauthorized` | مقدار `auth_key` و `AUTH_KEY` باید یکسان باشند |
 | timeout | IP دیگری برای Google امتحان کنید |
 | سرعت کم | از چند `script_id` برای load balancing استفاده کنید |
+| خطای `502 Bad JSON` | Google به‌جای JSON پاسخ HTML برگردانده (مثلاً صفحه quota یا 404). دلایل: `script_id` اشتباه، تجاوز از سهمیه روزانه Apps Script، یا عدم ایجاد deployment جدید پس از ویرایش `Code.gs`. `script_id` را بررسی کنید و یک **deployment جدید** بسازید. |
 
 ---
 
