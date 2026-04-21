@@ -16,8 +16,6 @@ For the latest news, releases, and project updates, follow our Telegram channel:
 
 ---
 
----
-
 ## Disclaimer
 
 MasterHttpRelayVPN is provided for educational, testing, and research purposes only.
