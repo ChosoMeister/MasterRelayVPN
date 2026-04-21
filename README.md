@@ -27,6 +27,7 @@ MasterHttpRelayVPN is provided for educational, testing, and research purposes o
 - **Google services compliance:** If you use Google Apps Script or other Google services with this project, you are responsible for complying with Google's Terms of Service, acceptable use rules, quotas, and platform policies. Misuse may lead to suspension or termination of your Google account or deployments.
 - **License terms:** Use, copying, distribution, and modification of this software are governed by the repository license. Any use outside those terms is prohibited.
 
+---
 
 ## How It Works
 
