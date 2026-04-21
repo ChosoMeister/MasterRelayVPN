@@ -1107,7 +1107,10 @@ class DomainFronter:
             data = json.loads(text)
         except json.JSONDecodeError:
             m = re.search(r'\{.*\}', text, re.DOTALL)
-            data = json.loads(m.group()) if m else None
+            try:
+                data = json.loads(m.group()) if m else None
+            except json.JSONDecodeError:
+                data = None
         if not data:
             raise RuntimeError(f"Bad batch response: {text[:200]}")
 
@@ -1131,6 +1134,8 @@ class DomainFronter:
         """Read one HTTP response. Keep-alive safe (no read-until-EOF)."""
         raw = b""
         while b"\r\n\r\n" not in raw:
+            if len(raw) > 65536:  # 64 KB header size limit
+                return 0, {}, b""
             chunk = await asyncio.wait_for(reader.read(8192), timeout=8)
             if not chunk:
                 break
@@ -1190,6 +1195,7 @@ class DomainFronter:
     async def _read_chunked(self, reader, buf=b""):
         """Incrementally read chunked transfer-encoding."""
         result = b""
+        _MAX_BODY = 200 * 1024 * 1024  # 200 MB total body cap
         while True:
             while b"\r\n" not in buf:
                 data = await asyncio.wait_for(reader.read(8192), timeout=20)
@@ -1208,6 +1214,9 @@ class DomainFronter:
             except ValueError:
                 break
             if size == 0:
+                break
+            if size > _MAX_BODY or len(result) + size > _MAX_BODY:
+                log.warning("Chunked body exceeds %d MB cap — truncating", _MAX_BODY // (1024 * 1024))
                 break
 
             while len(buf) < size + 2:

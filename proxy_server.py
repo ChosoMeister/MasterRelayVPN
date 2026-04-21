@@ -385,8 +385,14 @@ class ProxyServer:
     # ── CONNECT (HTTPS tunnelling) ────────────────────────────────
 
     async def _do_connect(self, target: str, reader, writer):
-        host, _, port = target.rpartition(":")
-        port = int(port) if port else 443
+        host, _, port_str = target.rpartition(":")
+        try:
+            port = int(port_str) if port_str else 443
+        except ValueError:
+            log.warning("CONNECT invalid target: %r", target)
+            writer.write(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+            await writer.drain()
+            return
         if not host:
             host, port = target, 443
 
@@ -801,6 +807,8 @@ class ProxyServer:
                 for raw_line in header_block.split(b"\r\n"):
                     if raw_line.lower().startswith(b"content-length:"):
                         length = int(raw_line.split(b":", 1)[1].strip())
+                        if length > 100 * 1024 * 1024:  # 100 MB cap
+                            raise ValueError(f"Request body too large: {length} bytes")
                         body = await reader.readexactly(length)
                         break
 
@@ -1010,6 +1018,10 @@ class ProxyServer:
         for raw_line in header_block.split(b"\r\n"):
             if raw_line.lower().startswith(b"content-length:"):
                 length = int(raw_line.split(b":", 1)[1].strip())
+                if length > 100 * 1024 * 1024:  # 100 MB cap
+                    writer.write(b"HTTP/1.1 413 Content Too Large\r\n\r\n")
+                    await writer.drain()
+                    return
                 body = await reader.readexactly(length)
                 break
 
@@ -1082,8 +1094,6 @@ class ProxyServer:
         to the target host and pipes raw HTTP through it.
         Much faster for rapid-fire requests (e.g., Telegram API).
         """
-        import re as _re
-
         # Parse target host:port from the raw HTTP request
         host = ""
         port = 80
