@@ -14,20 +14,28 @@ import logging
 import os
 import sys
 
+# Project modules live under ./src — put that folder on sys.path so the
+# historical flat imports ("from proxy_server import …") keep working.
+_SRC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
 from cert_installer import install_ca, is_ca_trusted
+from constants import __version__
+from logging_utils import configure as configure_logging, print_banner
 from mitm import CA_CERT_FILE
 from proxy_server import ProxyServer
 
-__version__ = "1.0.0"
-
 
 def setup_logging(level_name: str):
-    level = getattr(logging, level_name.upper(), logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(name)-12s] %(levelname)-7s %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    configure_logging(level_name)
+
+
+_PLACEHOLDER_AUTH_KEYS = {
+    "",
+    "CHANGE_ME_TO_A_STRONG_SECRET",
+    "your-secret-password-here",
+}
 
 
 def parse_args():
@@ -136,6 +144,14 @@ def main():
             print(f"Missing required config key: {key}")
             sys.exit(1)
 
+    if config.get("auth_key", "") in _PLACEHOLDER_AUTH_KEYS:
+        print(
+            "Refusing to start: 'auth_key' is unset or uses a known placeholder.\n"
+            "Pick a long random secret and set it in both config.json AND "
+            "the AUTH_KEY constant inside Code.gs (they must match)."
+        )
+        sys.exit(1)
+
     # Always Apps Script mode — force-set for backward-compat configs.
     config["mode"] = "apps_script"
     sid = config.get("script_ids") or config.get("script_id")
@@ -155,6 +171,7 @@ def main():
     setup_logging(config.get("log_level", "INFO"))
     log = logging.getLogger("Main")
 
+    print_banner(__version__)
     log.info("DomainFront Tunnel starting (Apps Script relay)")
 
     log.info("Apps Script relay : SNI=%s → script.google.com",
@@ -197,9 +214,17 @@ def main():
                  config.get("socks5_port", 1080))
 
     try:
-        asyncio.run(ProxyServer(config).start())
+        asyncio.run(_run(config))
     except KeyboardInterrupt:
         log.info("Stopped")
+
+
+async def _run(config):
+    server = ProxyServer(config)
+    try:
+        await server.start()
+    finally:
+        await server.stop()
 
 
 if __name__ == "__main__":

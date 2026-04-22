@@ -15,9 +15,54 @@ import time
 import ipaddress
 from urllib.parse import urlparse
 
+from constants import (
+    CACHE_MAX_MB,
+    CACHE_TTL_MAX,
+    CACHE_TTL_STATIC_LONG,
+    CACHE_TTL_STATIC_MED,
+    CLIENT_IDLE_TIMEOUT,
+    GOOGLE_DIRECT_ALLOW_EXACT,
+    GOOGLE_DIRECT_ALLOW_SUFFIXES,
+    GOOGLE_DIRECT_EXACT_EXCLUDE,
+    GOOGLE_DIRECT_SUFFIX_EXCLUDE,
+    GOOGLE_OWNED_EXACT,
+    GOOGLE_OWNED_SUFFIXES,
+    LARGE_FILE_EXTS,
+    MAX_HEADER_BYTES,
+    MAX_REQUEST_BODY_BYTES,
+    SNI_REWRITE_SUFFIXES,
+    STATIC_EXTS,
+    TCP_CONNECT_TIMEOUT,
+    TRACE_HOST_SUFFIXES,
+    UNCACHEABLE_HEADER_NAMES,
+)
 from domain_fronter import DomainFronter
 
 log = logging.getLogger("Proxy")
+
+
+def _is_ip_literal(host: str) -> bool:
+    """True for IPv4/IPv6 literals (strips brackets around IPv6)."""
+    h = host.strip("[]")
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        return False
+
+
+def _parse_content_length(header_block: bytes) -> int:
+    """Return Content-Length or 0. Matches only the exact header name."""
+    for raw_line in header_block.split(b"\r\n"):
+        name, sep, value = raw_line.partition(b":")
+        if not sep:
+            continue
+        if name.strip().lower() == b"content-length":
+            try:
+                return int(value.strip())
+            except ValueError:
+                return 0
+    return 0
 
 
 class ResponseCache:
@@ -75,25 +120,20 @@ class ResponseCache:
         # Explicit max-age
         m = re.search(r"max-age=(\d+)", hdr)
         if m:
-            return min(int(m.group(1)), 86400)
+            return min(int(m.group(1)), CACHE_TTL_MAX)
 
         # Heuristic by content type / extension
         path = url.split("?")[0].lower()
-        static_exts = (
-            ".css", ".js", ".woff", ".woff2", ".ttf", ".eot",
-            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
-            ".mp3", ".mp4", ".wasm",
-        )
-        for ext in static_exts:
+        for ext in STATIC_EXTS:
             if path.endswith(ext):
-                return 3600  # 1 hour for static assets
+                return CACHE_TTL_STATIC_LONG
 
         ct_m = re.search(r"content-type:\s*([^\r\n]+)", hdr)
         ct = ct_m.group(1) if ct_m else ""
         if "image/" in ct or "font/" in ct:
-            return 3600
+            return CACHE_TTL_STATIC_LONG
         if "text/css" in ct or "javascript" in ct:
-            return 1800
+            return CACHE_TTL_STATIC_MED
         if "text/html" in ct or "application/json" in ct:
             return 0  # don't cache dynamic content by default
 
@@ -101,45 +141,12 @@ class ResponseCache:
 
 
 class ProxyServer:
-    _GOOGLE_DIRECT_EXACT_EXCLUDE = {
-        "gemini.google.com",
-        "aistudio.google.com",
-        "notebooklm.google.com",
-        "labs.google.com",
-        "meet.google.com",
-        "accounts.google.com",
-        "ogs.google.com",
-        "mail.google.com",
-        "calendar.google.com",
-        "drive.google.com",
-        "docs.google.com",
-        "chat.google.com",
-        "photos.google.com",
-        "maps.google.com",
-        "myaccount.google.com",
-        "contacts.google.com",
-        "classroom.google.com",
-        "keep.google.com",
-        "play.google.com",
-    }
-    _GOOGLE_DIRECT_SUFFIX_EXCLUDE = (
-        ".meet.google.com",
-    )
-    _GOOGLE_DIRECT_ALLOW_EXACT = {
-        "www.google.com",
-        "google.com",
-        "safebrowsing.google.com",
-    }
-    _GOOGLE_DIRECT_ALLOW_SUFFIXES = ()
-    _TRACE_HOST_SUFFIXES = (
-        "chatgpt.com",
-        "openai.com",
-        "gemini.google.com",
-        "google.com",
-        "cloudflare.com",
-        "challenges.cloudflare.com",
-        "turnstile",
-    )
+    # Pulled from constants.py so users can override any subset via config.
+    _GOOGLE_DIRECT_EXACT_EXCLUDE  = GOOGLE_DIRECT_EXACT_EXCLUDE
+    _GOOGLE_DIRECT_SUFFIX_EXCLUDE = GOOGLE_DIRECT_SUFFIX_EXCLUDE
+    _GOOGLE_DIRECT_ALLOW_EXACT    = GOOGLE_DIRECT_ALLOW_EXACT
+    _GOOGLE_DIRECT_ALLOW_SUFFIXES = GOOGLE_DIRECT_ALLOW_SUFFIXES
+    _TRACE_HOST_SUFFIXES          = TRACE_HOST_SUFFIXES
 
     def __init__(self, config: dict):
         self.host = config.get("listen_host", "127.0.0.1")
@@ -149,8 +156,9 @@ class ProxyServer:
         self.socks_port = config.get("socks5_port", 1080)
         self.fronter = DomainFronter(config)
         self.mitm = None
-        self._cache = ResponseCache(max_mb=50)
+        self._cache = ResponseCache(max_mb=CACHE_MAX_MB)
         self._direct_fail_until: dict[str, float] = {}
+        self._servers: list[asyncio.base_events.Server] = []
 
         # hosts override — DNS fake-map: domain/suffix → IP
         # Checked before any real DNS lookup; supports exact and suffix matching.
@@ -172,6 +180,14 @@ class ProxyServer:
             )
         }
 
+        # ── Per-host policy ────────────────────────────────────────
+        # block_hosts  — refuse traffic entirely (close or 403)
+        # bypass_hosts — route directly (no MITM, no relay)
+        # Both accept exact hostnames and leading-dot suffix patterns,
+        # e.g. ".local" matches any *.local domain.
+        self._block_hosts  = self._load_host_rules(config.get("block_hosts", []))
+        self._bypass_hosts = self._load_host_rules(config.get("bypass_hosts", []))
+
         try:
             from mitm import MITMCertManager
             self.mitm = MITMCertManager()
@@ -179,6 +195,45 @@ class ProxyServer:
             log.error("Apps Script relay requires the 'cryptography' package.")
             log.error("Run: pip install cryptography")
             raise SystemExit(1)
+
+    # ── Host-policy helpers ───────────────────────────────────────
+
+    @staticmethod
+    def _load_host_rules(raw) -> tuple[set[str], tuple[str, ...]]:
+        """Accept a list of host strings; return (exact_set, suffix_tuple).
+
+        A rule starting with '.' (e.g. ".internal") is a suffix rule.
+        Everything else is treated as an exact match. Case-insensitive.
+        """
+        exact: set[str] = set()
+        suffixes: list[str] = []
+        for item in raw or []:
+            h = str(item).strip().lower().rstrip(".")
+            if not h:
+                continue
+            if h.startswith("."):
+                suffixes.append(h)
+            else:
+                exact.add(h)
+        return exact, tuple(suffixes)
+
+    @staticmethod
+    def _host_matches_rules(host: str,
+                            rules: tuple[set[str], tuple[str, ...]]) -> bool:
+        exact, suffixes = rules
+        h = host.lower().rstrip(".")
+        if h in exact:
+            return True
+        for s in suffixes:
+            if h.endswith(s):
+                return True
+        return False
+
+    def _is_blocked(self, host: str) -> bool:
+        return self._host_matches_rules(host, self._block_hosts)
+
+    def _is_bypassed(self, host: str) -> bool:
+        return self._host_matches_rules(host, self._bypass_hosts)
 
     @staticmethod
     def _header_value(headers: dict | None, name: str) -> str:
@@ -193,10 +248,7 @@ class ProxyServer:
                        headers: dict | None, body: bytes) -> bool:
         if method.upper() != "GET" or body:
             return False
-        for name in (
-            "cookie", "authorization", "proxy-authorization", "range",
-            "if-none-match", "if-modified-since", "cache-control", "pragma",
-        ):
+        for name in UNCACHEABLE_HEADER_NAMES:
             if self._header_value(headers, name):
                 return False
         return self.fronter._is_static_asset_url(url)
@@ -249,6 +301,8 @@ class ProxyServer:
                 log.error("SOCKS5 listener failed on %s:%d: %s",
                           self.socks_host, self.socks_port, e)
 
+        self._servers = [s for s in (http_srv, socks_srv) if s]
+
         log.info(
             "HTTP proxy listening on %s:%d",
             self.host, self.port,
@@ -269,6 +323,24 @@ class ProxyServer:
             else:
                 await http_srv.serve_forever()
 
+    async def stop(self):
+        """Shut down all listeners and release relay resources."""
+        for srv in self._servers:
+            try:
+                srv.close()
+            except Exception:
+                pass
+        for srv in self._servers:
+            try:
+                await srv.wait_closed()
+            except Exception:
+                pass
+        self._servers = []
+        try:
+            await self.fronter.close()
+        except Exception as exc:
+            log.debug("fronter.close: %s", exc)
+
     # ── client handler ────────────────────────────────────────────
 
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -283,6 +355,9 @@ class ProxyServer:
             while True:
                 line = await asyncio.wait_for(reader.readline(), timeout=10)
                 header_block += line
+                if len(header_block) > MAX_HEADER_BYTES:
+                    log.warning("Request header block exceeds cap — closing")
+                    return
                 if line in (b"\r\n", b"\n", b""):
                     break
 
@@ -397,6 +472,54 @@ class ProxyServer:
                                     reader: asyncio.StreamReader,
                                     writer: asyncio.StreamWriter):
         """Route a target connection through the Apps Script relay."""
+        # ── Block / bypass policy ─────────────────────────────────
+        if self._is_blocked(host):
+            log.warning("BLOCKED → %s:%d (matches block_hosts)", host, port)
+            try:
+                writer.write(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+                await writer.drain()
+            except Exception:
+                pass
+            return
+
+        if self._is_bypassed(host):
+            log.info("Bypass tunnel → %s:%d (matches bypass_hosts)", host, port)
+            await self._do_direct_tunnel(host, port, reader, writer)
+            return
+
+        # ── IP-literal destinations ───────────────────────────────
+        # Prefer a direct tunnel first (works for unblocked IPs and keeps
+        # TLS end-to-end). If the network blocks the route (common for
+        # Telegram data-centers behind DPI), fall back to:
+        #   • port 443 → MITM + relay through Apps Script
+        #   • port 80  → plain-HTTP relay through Apps Script
+        #   • other    → give up (non-HTTP; can't be relayed)
+        # We remember per-IP failures for a short while so subsequent
+        # connects skip the doomed direct attempt.
+        if _is_ip_literal(host):
+            if not self._direct_temporarily_disabled(host):
+                log.info("Direct tunnel → %s:%d (IP literal)", host, port)
+                ok = await self._do_direct_tunnel(host, port, reader, writer)
+                if ok:
+                    return
+                self._remember_direct_failure(host, ttl=300)
+                if port not in (80, 443):
+                    log.warning("Direct tunnel failed for %s:%d", host, port)
+                    return
+                log.warning(
+                    "Direct tunnel fallback → %s:%d (switching to relay)",
+                    host, port,
+                )
+            else:
+                log.info(
+                    "Relay fallback → %s:%d (direct temporarily disabled)",
+                    host, port,
+                )
+            if port == 443:
+                await self._do_mitm_connect(host, port, reader, writer)
+            elif port == 80:
+                await self._do_plain_http_tunnel(host, port, reader, writer)
+            return
 
         override_ip = self._sni_rewrite_ip(host)
         if override_ip:
@@ -429,34 +552,22 @@ class ProxyServer:
                 await self._do_plain_http_tunnel(host, port, reader, writer)
         elif port == 443:
             await self._do_mitm_connect(host, port, reader, writer)
-        else:
+        elif port == 80:
             await self._do_plain_http_tunnel(host, port, reader, writer)
+        else:
+            # Non-HTTP port (e.g. mtalk:5228 XMPP, IMAP, SMTP, SSH) —
+            # payload isn't HTTP, so we can't relay or MITM. Tunnel bytes.
+            log.info("Direct tunnel → %s:%d (non-HTTP port)", host, port)
+            ok = await self._do_direct_tunnel(host, port, reader, writer)
+            if not ok:
+                log.warning("Direct tunnel failed for %s:%d", host, port)
 
     # ── Hosts override (fake DNS) ─────────────────────────────────
 
     # Built-in list of domains that must be reached via Google's frontend IP
     # with SNI rewritten to `front_domain` (default: www.google.com).
-    # These are Google-owned services whose real SNI is DPI-blocked in some
-    # countries, but that Google serves from the same edge IP as www.google.com.
-    # Users don't need to configure anything — any host matching one of these
-    # suffixes is transparently SNI-rewritten to the configured `google_ip`.
-    # Config's "hosts" map still takes precedence (for custom overrides).
-    _SNI_REWRITE_SUFFIXES = (
-        "youtube.com",
-        "youtu.be",
-        "youtube-nocookie.com",
-        "ytimg.com",
-        "ggpht.com",
-        "gvt1.com",
-        "gvt2.com",
-        "doubleclick.net",
-        "googlesyndication.com",
-        "googleadservices.com",
-        "google-analytics.com",
-        "googletagmanager.com",
-        "googletagservices.com",
-        "fonts.googleapis.com",
-    )
+    # Source: constants.SNI_REWRITE_SUFFIXES.
+    _SNI_REWRITE_SUFFIXES = SNI_REWRITE_SUFFIXES
 
     def _sni_rewrite_ip(self, host: str) -> str | None:
         """Return the IP to SNI-rewrite `host` through, or None.
@@ -493,17 +604,12 @@ class ProxyServer:
 
     # ── Google domain detection ───────────────────────────────────
 
-    # Only domains whose SNI the ISP does NOT block — direct tunnel is safe.
-    # YouTube/googlevideo SNIs are blocked; they go through _do_sni_rewrite_tunnel
-    # via the hosts map instead.
-    _GOOGLE_OWNED_SUFFIXES = (
-        ".google.com", ".google.co",
-        ".googleapis.com", ".gstatic.com",
-        ".googleusercontent.com",
-    )
-    _GOOGLE_OWNED_EXACT = {
-        "google.com", "gstatic.com", "googleapis.com",
-    }
+    # Google-owned domains that may use the raw direct-tunnel shortcut.
+    # YouTube/googlevideo SNIs are blocked; they go through
+    # _do_sni_rewrite_tunnel via the hosts map instead.
+    # Source: constants.GOOGLE_OWNED_SUFFIXES / GOOGLE_OWNED_EXACT.
+    _GOOGLE_OWNED_SUFFIXES = GOOGLE_OWNED_SUFFIXES
+    _GOOGLE_OWNED_EXACT = GOOGLE_OWNED_EXACT
 
     def _is_google_domain(self, host: str) -> bool:
         """Return True if host should use the raw direct Google shortcut."""
@@ -657,10 +763,16 @@ class ProxyServer:
             except Exception as e:
                 log.debug("Pipe %s ended: %s", label, e)
             finally:
+                # Half-close rather than hard-close so the other direction
+                # can still flush final bytes (important for TLS close_notify).
                 try:
-                    dst.close()
+                    if not dst.is_closing() and dst.can_write_eof():
+                        dst.write_eof()
                 except Exception:
-                    pass
+                    try:
+                        dst.close()
+                    except Exception:
+                        pass
 
         await asyncio.gather(
             pipe(reader, w_remote, f"client→{host}"),
@@ -759,13 +871,36 @@ class ProxyServer:
                 transport, protocol, ssl_ctx, server_side=True,
             )
         except Exception as e:
-            # Non-HTTPS traffic (e.g. MTProto, plain HTTP on port 80/443)
-            # routed through the proxy will always fail TLS — log at DEBUG
-            # to avoid alarming noise.
-            if port != 443:
-                log.debug("TLS handshake skipped for %s:%d (non-HTTPS): %s", host, port, e)
+            # TLS handshake failed. Common causes:
+            #   • Telegram Desktop / MTProto over port 443 sends obfuscated
+            #     non-TLS bytes — we literally cannot decrypt these, and
+            #     since the target IP is blocked we can't direct-tunnel
+            #     either. The only workaround is to configure Telegram as
+            #     an HTTP proxy (not SOCKS5), so it sends hostnames our
+            #     SNI-rewrite path can handle.
+            #   • Client CONNECTs but never speaks TLS (some probes).
+            if _is_ip_literal(host) and port == 443:
+                log.warning(
+                    "MITM TLS handshake failed for %s:%d (%s). "
+                    "Likely non-TLS traffic (e.g. Telegram MTProto over "
+                    "SOCKS5). Cannot relay raw TCP to a blocked IP — "
+                    "use the HTTP proxy instead so hostnames are preserved.",
+                    host, port, e,
+                )
+            elif port != 443:
+                log.debug(
+                    "TLS handshake skipped for %s:%d (non-HTTPS): %s",
+                    host, port, e,
+                )
             else:
                 log.debug("TLS handshake failed for %s: %s", host, e)
+            # Close the client side so it fails fast and can retry, rather
+            # than hanging on a half-open connection.
+            try:
+                if not writer.is_closing():
+                    writer.close()
+            except Exception:
+                pass
             return
 
         # Update writer to use the new TLS transport
@@ -778,7 +913,9 @@ class ProxyServer:
         # Read and relay HTTP requests from the browser (now decrypted)
         while True:
             try:
-                first_line = await asyncio.wait_for(reader.readline(), timeout=120)
+                first_line = await asyncio.wait_for(
+                    reader.readline(), timeout=CLIENT_IDLE_TIMEOUT
+                )
                 if not first_line:
                     break
 
@@ -786,18 +923,18 @@ class ProxyServer:
                 while True:
                     line = await asyncio.wait_for(reader.readline(), timeout=10)
                     header_block += line
+                    if len(header_block) > MAX_HEADER_BYTES:
+                        break
                     if line in (b"\r\n", b"\n", b""):
                         break
 
                 # Read body
                 body = b""
-                for raw_line in header_block.split(b"\r\n"):
-                    if raw_line.lower().startswith(b"content-length:"):
-                        length = int(raw_line.split(b":", 1)[1].strip())
-                        if length > 100 * 1024 * 1024:  # 100 MB cap
-                            raise ValueError(f"Request body too large: {length} bytes")
-                        body = await reader.readexactly(length)
-                        break
+                length = _parse_content_length(header_block)
+                if length > MAX_REQUEST_BODY_BYTES:
+                    raise ValueError(f"Request body too large: {length} bytes")
+                if length > 0:
+                    body = await reader.readexactly(length)
 
                 # Parse the request
                 request_line = first_line.decode(errors="replace").strip()
@@ -982,18 +1119,8 @@ class ProxyServer:
 
     def _is_likely_download(self, url: str, headers: dict) -> bool:
         """Heuristic: is this URL likely a large file download?"""
-        # Check file extension
         path = url.split("?")[0].lower()
-        large_exts = {
-            ".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar",
-            ".exe", ".msi", ".dmg", ".deb", ".rpm", ".apk",
-            ".iso", ".img",
-            ".mp4", ".mkv", ".avi", ".mov", ".webm",
-            ".mp3", ".flac", ".wav", ".aac",
-            ".pdf", ".doc", ".docx", ".ppt", ".pptx",
-            ".wasm",
-        }
-        for ext in large_exts:
+        for ext in LARGE_FILE_EXTS:
             if path.endswith(ext):
                 return True
         return False
@@ -1002,15 +1129,13 @@ class ProxyServer:
 
     async def _do_http(self, header_block: bytes, reader, writer):
         body = b""
-        for raw_line in header_block.split(b"\r\n"):
-            if raw_line.lower().startswith(b"content-length:"):
-                length = int(raw_line.split(b":", 1)[1].strip())
-                if length > 100 * 1024 * 1024:  # 100 MB cap
-                    writer.write(b"HTTP/1.1 413 Content Too Large\r\n\r\n")
-                    await writer.drain()
-                    return
-                body = await reader.readexactly(length)
-                break
+        length = _parse_content_length(header_block)
+        if length > MAX_REQUEST_BODY_BYTES:
+            writer.write(b"HTTP/1.1 413 Content Too Large\r\n\r\n")
+            await writer.drain()
+            return
+        if length > 0:
+            body = await reader.readexactly(length)
 
         first_line = header_block.split(b"\r\n")[0].decode(errors="replace")
         log.info("HTTP → %s", first_line)

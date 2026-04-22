@@ -63,7 +63,7 @@ pip install -r requirements.txt
 1. وارد [Google Apps Script](https://script.google.com/) شوید.
 2. روی **New project** کلیک کنید.
 3. کد پیش‌فرض را کامل حذف کنید.
-4. فایل `Code.gs` همین پروژه را باز کنید، همه محتوای آن را کپی کنید و داخل Apps Script قرار دهید.
+4. فایل `apps_script/Code.gs` همین پروژه را باز کنید، همه محتوای آن را کپی کنید و داخل Apps Script قرار دهید.
 5. این خط را به یک رمز دلخواه و امن تغییر دهید:
    ```javascript
    const AUTH_KEY = "your-secret-password-here";
@@ -188,6 +188,20 @@ Firefox معمولا certificate store جداگانه دارد:
 | `front_domain` | `www.google.com` | دامنه‌ای که فیلتر می‌بیند |
 | `verify_ssl` | `true` | بررسی اعتبار TLS |
 | `script_ids` | - | چند Deployment ID برای load balancing |
+| `block_hosts` | `[]` | هاست‌هایی که هرگز نباید tunnel شوند (پاسخ 403). نام دقیق (`ads.example.com`) یا پسوند با نقطه‌ی ابتدایی (`.doubleclick.net`). |
+| `bypass_hosts` | `["localhost", ".local", ".lan", ".home.arpa"]` | هاست‌هایی که مستقیم می‌روند (بدون MITM و بدون رله). برای منابع داخلی شبکه یا سایت‌هایی که با MITM مشکل دارند. |
+| `direct_google_exclude` | مراجعه به [config.example.json](config.example.json) | اپ‌های Google که باید از مسیر MITM برای رله استفاده کنند به‌جای tunnel مستقیم. |
+
+### وابستگی‌های اختیاری
+
+همه وابستگی‌های [`requirements.txt`](requirements.txt) اختیاری هستند — در حالت پایه بدون هیچ‌کدام کار می‌کند، ولی با نصب آن‌ها امکانات بیشتری در دسترس است:
+
+| بسته | کاربرد |
+|------|---------|
+| `cryptography` | رمزگشایی MITM برای HTTPS (در حالت `apps_script` لازم است) |
+| `h2` | ارتباط HTTP/2 با رله Apps Script (به‌طور محسوسی سریع‌تر) |
+| `brotli` | پشتیبانی از فشرده‌سازی `Content-Encoding: br` |
+| `zstandard` | پشتیبانی از فشرده‌سازی `Content-Encoding: zstd` |
 
 ### استفاده از چند Script ID
 
@@ -241,16 +255,26 @@ python3 main.py --no-cert-check       # رد شدن از بررسی خودکار
 
 ## فایل‌های پروژه
 
-| فایل | کاربرد |
-|------|--------|
-| `main.py` | اجرای برنامه |
-| `proxy_server.py` | مدیریت اتصال مرورگر |
-| `domain_fronter.py` | کلاینت رله Apps Script (با عبور از Google) |
-| `h2_transport.py` | ارتباط سریع‌تر با HTTP/2 |
-| `mitm.py` | ساخت و مدیریت certificate |
-| `cert_installer.py` | نصب خودکار گواهی CA در ویندوز، مک، لینوکس و Firefox |
-| `Code.gs` | رله Apps Script |
-| `config.example.json` | فایل نمونه تنظیمات |
+```
+MasterHttpRelayVPN/
+├── main.py                    # نقطه شروع: پراکسی را راه‌اندازی می‌کند
+├── config.example.json        # نمونه کانفیگ (به config.json کپی شود)
+├── requirements.txt           # وابستگی‌های اختیاری پایتون
+├── apps_script/
+│   └── Code.gs                # اسکریپت رله روی Google Apps Script
+├── ca/                        # گواهی MITM (هرگز به اشتراک نگذارید)
+│   ├── ca.crt
+│   └── ca.key
+└── src/                       # پیاده‌سازی پراکسی
+    ├── proxy_server.py        # دریافت CONNECT و SOCKS5
+    ├── domain_fronter.py      # کلاینت رله Apps Script (fronted از طریق Google)
+    ├── h2_transport.py        # ارتباط HTTP/2 (اختیاری)
+    ├── mitm.py                # ساخت و مدیریت گواهی‌ها
+    ├── cert_installer.py      # نصب خودکار CA در ویندوز/مک/لینوکس + فایرفاکس
+    ├── codec.py               # رمزگشای Content-Encoding (gzip/deflate/br/zstd)
+    ├── constants.py           # مقادیر پیش‌فرض قابل تنظیم
+    └── logging_utils.py       # فرمت‌دهنده‌ی لاگ رنگی و منظم
+```
 
 ---
 
@@ -266,6 +290,7 @@ python3 main.py --no-cert-check       # رد شدن از بررسی خودکار
 | timeout | IP دیگری برای Google امتحان کنید |
 | سرعت کم | از چند `script_id` برای load balancing استفاده کنید |
 | خطای `502 Bad JSON` | Google به‌جای JSON پاسخ HTML برگردانده (مثلاً صفحه quota یا 404). دلایل: `script_id` اشتباه، تجاوز از سهمیه روزانه Apps Script، یا عدم ایجاد deployment جدید پس از ویرایش `Code.gs`. `script_id` را بررسی کنید و یک **deployment جدید** بسازید. |
+| تلگرام روی HTTP proxy کار می‌کند ولی روی SOCKS5 نه | **طبیعی است.** کلاینت SOCKS5 نام دامنه را روی سیستم خودش resolve می‌کند و مستقیم به IP وصل می‌شود، پس بایت‌های MTProto تلگرام به IP فیلترشده می‌رسد که نه می‌توانیم direct-tunnel کنیم و نه MITM. تلگرام را به‌جای SOCKS5 به صورت **HTTP proxy** (`127.0.0.1:8085`) تنظیم کنید — در این حالت نام دامنه ارسال می‌شود و پراکسی با SNI-rewrite از طریق Google عبور می‌دهد. |
 
 ---
 

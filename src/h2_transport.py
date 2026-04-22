@@ -15,11 +15,12 @@ Requires: pip install h2
 """
 
 import asyncio
-import gzip
 import logging
 import socket
 import ssl
 from urllib.parse import urlparse
+
+import codec
 
 log = logging.getLogger("H2")
 
@@ -151,9 +152,11 @@ class H2Transport:
         # Connection-level flow control: ~16MB window
         self._h2.increment_flow_control_window(2 ** 24 - 65535)
 
-        # Per-stream settings: 1MB initial window, disable server push
+        # Per-stream settings: 8MB initial window (covers all typical relay
+        # request bodies in one shot so we never have to stall for a
+        # WINDOW_UPDATE mid-send). Disable server push.
         self._h2.update_settings({
-            h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 1 * 1024 * 1024,
+            h2.settings.SettingCodes.INITIAL_WINDOW_SIZE: 8 * 1024 * 1024,
             h2.settings.SettingCodes.ENABLE_PUSH: 0,
         })
 
@@ -246,7 +249,7 @@ class H2Transport:
                 (":path", path),
                 (":authority", host),
                 (":scheme", "https"),
-                ("accept-encoding", "gzip"),
+                ("accept-encoding", codec.supported_encodings()),
             ]
             if headers:
                 for k, v in headers.items():
@@ -279,30 +282,37 @@ class H2Transport:
         if state.error:
             raise ConnectionError(f"H2 stream error: {state.error}")
 
-        # Auto-decompress gzip
+        # Auto-decompress (gzip / deflate / brotli / zstd)
         resp_body = bytes(state.data)
-        if state.headers.get("content-encoding", "").lower() == "gzip":
-            try:
-                resp_body = gzip.decompress(resp_body)
-            except Exception:
-                pass
+        enc = state.headers.get("content-encoding", "")
+        if enc:
+            resp_body = codec.decode(resp_body, enc)
 
         return state.status, state.headers, resp_body
 
     def _send_body(self, stream_id: int, body: bytes):
-        """Send request body, respecting H2 flow control window."""
-        # For small bodies (typical JSON payloads), send in one shot
+        """Send request body, respecting H2 flow control window.
+
+        The initial per-stream window is 8 MB (see _do_connect) which
+        comfortably covers all relay JSON payloads. If the body is ever
+        larger than the available window, we raise rather than silently
+        truncate — the caller will retry on a fresh connection.
+        """
+        sent = 0
+        total = len(body)
         while body:
             max_size = self._h2.local_settings.max_frame_size
             window = self._h2.local_flow_control_window(stream_id)
             send_size = min(len(body), max_size, window)
             if send_size <= 0:
-                # Flow control full — let the reader loop process
-                # window updates before we continue
-                break
+                raise BufferError(
+                    f"H2 flow control exhausted after {sent}/{total} bytes; "
+                    f"increase initial window or shrink payload"
+                )
             end = send_size >= len(body)
             self._h2.send_data(stream_id, body[:send_size], end_stream=end)
             body = body[send_size:]
+            sent += send_size
 
     # ── Background reader ─────────────────────────────────────────
 

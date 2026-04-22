@@ -11,7 +11,6 @@ returns the response.
 import asyncio
 import base64
 import hashlib
-import gzip
 import json
 import logging
 import re
@@ -19,15 +18,27 @@ import ssl
 import time
 from urllib.parse import urlparse
 
+import codec
+from constants import (
+    BATCH_MAX,
+    BATCH_WINDOW_MACRO,
+    BATCH_WINDOW_MICRO,
+    CONN_TTL,
+    POOL_MAX,
+    POOL_MIN_IDLE,
+    RELAY_TIMEOUT,
+    SEMAPHORE_MAX,
+    STATEFUL_HEADER_NAMES,
+    STATIC_EXTS,
+    TLS_CONNECT_TIMEOUT,
+    WARM_POOL_COUNT,
+)
+
 log = logging.getLogger("Fronter")
 
 
 class DomainFronter:
-    _STATIC_EXTS = (
-        ".css", ".js", ".mjs", ".woff", ".woff2", ".ttf", ".eot",
-        ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico",
-        ".mp3", ".mp4", ".webm", ".wasm", ".avif",
-    )
+    _STATIC_EXTS = STATIC_EXTS
 
     def __init__(self, config: dict):
         self.connect_host = config.get("google_ip", "216.239.38.120")
@@ -46,22 +57,25 @@ class DomainFronter:
         # Connection pool — TTL-based, pre-warmed, with concurrency control
         self._pool: list[tuple[asyncio.StreamReader, asyncio.StreamWriter, float]] = []
         self._pool_lock = asyncio.Lock()
-        self._pool_max = 50
-        self._conn_ttl = 45.0           # seconds before a pooled conn is discarded
-        self._semaphore = asyncio.Semaphore(50)  # max concurrent relay connections
+        self._pool_max = POOL_MAX
+        self._conn_ttl = CONN_TTL
+        self._semaphore = asyncio.Semaphore(SEMAPHORE_MAX)
         self._warmed = False
-        self._refilling = False         # background pool refill in progress
-        self._pool_min_idle = 15        # maintain at least this many idle connections
+        self._refilling = False
+        self._pool_min_idle = POOL_MIN_IDLE
         self._maintenance_task: asyncio.Task | None = None
+        self._keepalive_task: asyncio.Task | None = None
+        self._warm_task: asyncio.Task | None = None
+        self._bg_tasks: set[asyncio.Task] = set()
 
         # Batch collector for grouping concurrent relay() calls
         self._batch_lock = asyncio.Lock()
         self._batch_pending: list[tuple[dict, asyncio.Future]] = []
         self._batch_task: asyncio.Task | None = None
-        self._batch_window_micro = 0.005  # 5ms micro-window (single req)
-        self._batch_window_macro = 0.050 # 50ms macro-window (burst traffic)
-        self._batch_max = 50            # max requests per batch
-        self._batch_enabled = True      # disabled on first batch API failure
+        self._batch_window_micro = BATCH_WINDOW_MICRO
+        self._batch_window_macro = BATCH_WINDOW_MACRO
+        self._batch_max = BATCH_MAX
+        self._batch_enabled = True
 
         # Request coalescing — dedup concurrent identical GETs
         self._coalesce: dict[str, list[asyncio.Future]] = {}
@@ -78,6 +92,9 @@ class DomainFronter:
                          "all requests will share one connection")
         except ImportError:
             pass
+
+        # Capability log for content encodings.
+        log.info("Response codecs: %s", codec.supported_encodings())
 
     # ── helpers ───────────────────────────────────────────────────
 
@@ -115,11 +132,13 @@ class DomainFronter:
                     writer.close()
                 except Exception:
                     pass
-        reader, writer = await asyncio.wait_for(self._open(), timeout=10)
+        reader, writer = await asyncio.wait_for(
+            self._open(), timeout=TLS_CONNECT_TIMEOUT
+        )
         # Pool was empty — trigger aggressive background refill
         if not self._refilling:
             self._refilling = True
-            asyncio.create_task(self._refill_pool())
+            self._spawn(self._refill_pool())
         return reader, writer, asyncio.get_event_loop().time()
 
     async def _release(self, reader, writer, created):
@@ -248,13 +267,37 @@ class DomainFronter:
         if self._warmed:
             return
         self._warmed = True
-        asyncio.create_task(self._do_warm())
+        self._warm_task = self._spawn(self._do_warm())
         # Start continuous pool maintenance
         if self._maintenance_task is None:
-            self._maintenance_task = asyncio.create_task(self._pool_maintenance())
+            self._maintenance_task = self._spawn(self._pool_maintenance())
         # Start H2 connection (runs alongside H1 pool)
         if self._h2:
-            asyncio.create_task(self._h2_connect_and_warm())
+            self._spawn(self._h2_connect_and_warm())
+
+    def _spawn(self, coro) -> asyncio.Task:
+        """Create a task and keep a strong reference for clean cancellation."""
+        task = asyncio.create_task(coro)
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
+        return task
+
+    async def close(self):
+        """Cancel background tasks and close all pooled / H2 connections."""
+        for task in list(self._bg_tasks):
+            task.cancel()
+        if self._bg_tasks:
+            self._spawn(self._prewarm_script())
+            if self._keepalive_task is None or self._keepalive_task.done():
+                self._keepalive_task = self._spawn
+
+        await self._flush_pool()
+
+        if self._h2:
+            try:
+                await self._h2.close()
+            except Exception as exc:
+                log.debug("h2 close: %s", exc)
 
     async def _h2_connect(self):
         """Connect the HTTP/2 transport in background."""
@@ -351,7 +394,7 @@ class DomainFronter:
                 log.debug("Keepalive failed: %s", e)
 
     async def _do_warm(self):
-        """Open connections in parallel — failures are fine."""
+        """Open WARM_POOL_COUNTnnections in parallel — failures are fine."""
         count = 30
         coros = [self._add_conn_to_pool() for _ in range(count)]
         results = await asyncio.gather(*coros, return_exceptions=True)
@@ -401,29 +444,43 @@ class DomainFronter:
         return await self._batch_submit(payload)
 
     async def _coalesced_submit(self, url: str, payload: dict) -> bytes:
-        """Dedup concurrent requests for the same URL (no Range header)."""
-        if url in self._coalesce:
-            # Another task is already fetching this URL — wait for it
-            future = asyncio.get_event_loop().create_future()
-            self._coalesce[url].append(future)
-            log.debug("Coalesced request: %s", url[:60])
+        """Dedup concurrent requests for the same URL (no Range header).
+
+        Uses `_batch_lock` to atomically check-and-append, preventing a
+        race where the owning task's `finally` pops the entry between
+        the check and append by a second task.
+        """
+        loop = asyncio.get_event_loop()
+        async with self._batch_lock:
+            waiters = self._coalesce.get(url)
+            if waiters is not None:
+                future = loop.create_future()
+                waiters.append(future)
+                log.debug("Coalesced request: %s", url[:60])
+                waiting = True
+            else:
+                self._coalesce[url] = []
+                waiting = False
+
+        if waiting:
             return await future
 
-        self._coalesce[url] = []
         try:
             result = await self._batch_submit(payload)
-            # Resolve all waiters
-            for f in self._coalesce.get(url, []):
-                if not f.done():
-                    f.set_result(result)
-            return result
         except Exception as e:
-            for f in self._coalesce.get(url, []):
+            async with self._batch_lock:
+                waiters = self._coalesce.pop(url, [])
+            for f in waiters:
                 if not f.done():
                     f.set_exception(e)
             raise
-        finally:
-            self._coalesce.pop(url, None)
+
+        async with self._batch_lock:
+            waiters = self._coalesce.pop(url, [])
+        for f in waiters:
+            if not f.done():
+                f.set_result(result)
+        return result
 
     async def relay_parallel(self, method: str, url: str,
                              headers: dict, body: bytes = b"",
@@ -621,11 +678,7 @@ class DomainFronter:
             return True
 
         if headers:
-            for name in (
-                "cookie", "authorization", "proxy-authorization",
-                "origin", "referer", "if-none-match", "if-modified-since",
-                "cache-control", "pragma",
-            ):
+            for name in STATEFUL_HEADER_NAMES:
                 if cls._header_value(headers, name):
                     return True
 
@@ -659,10 +712,10 @@ class DomainFronter:
                 if self._batch_task and not self._batch_task.done():
                     self._batch_task.cancel()
                 self._batch_task = None
-                asyncio.create_task(self._batch_send(batch))
+                self._spawn(self._batch_send(batch))
             elif self._batch_task is None or self._batch_task.done():
                 # First request in a new batch window — start timer
-                self._batch_task = asyncio.create_task(self._batch_timer())
+                self._batch_task = self._spawn(self._batch_timer())
 
         return await future
 
@@ -682,7 +735,7 @@ class DomainFronter:
                     batch = self._batch_pending[:]
                     self._batch_pending.clear()
                     self._batch_task = None
-                    asyncio.create_task(self._batch_send(batch))
+                    self._spawn(self._batch_send(batch))
                 return
 
         # Tier 2: burst detected — wait more to accumulate
@@ -692,7 +745,7 @@ class DomainFronter:
                 batch = self._batch_pending[:]
                 self._batch_pending.clear()
                 self._batch_task = None
-                asyncio.create_task(self._batch_send(batch))
+                self._spawn(self._batch_send(batch))
 
     async def _batch_send(self, batch: list):
         """Send a batch of requests. Uses fetchAll for multi, single for one."""
@@ -741,7 +794,7 @@ class DomainFronter:
             for attempt in range(2):
                 try:
                     return await asyncio.wait_for(
-                        self._relay_single_h2(payload), timeout=25
+                        self._relay_single_h2(payload), timeout=RELAY_TIMEOUT
                     )
                 except Exception as e:
                     if attempt == 0:
@@ -759,7 +812,7 @@ class DomainFronter:
             for attempt in range(2):
                 try:
                     return await asyncio.wait_for(
-                        self._relay_single(payload), timeout=25
+                        self._relay_single(payload), timeout=RELAY_TIMEOUT
                     )
                 except Exception as e:
                     if attempt == 0:
@@ -1018,12 +1071,10 @@ class DomainFronter:
                 except asyncio.TimeoutError:
                     break
 
-        # Auto-decompress gzip from Google frontend
-        if headers.get("content-encoding", "").lower() == "gzip":
-            try:
-                body = gzip.decompress(body)
-            except Exception:
-                pass  # not actually gzip, use as-is
+        # Auto-decompress (gzip/deflate/br/zstd) from Google frontend
+        enc = headers.get("content-encoding", "")
+        if enc:
+            body = codec.decode(body, enc)
 
         return status, headers, body
 

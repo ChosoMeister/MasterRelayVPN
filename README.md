@@ -69,7 +69,7 @@ This is the "relay" that sits on Google's servers and fetches websites for you. 
 1. Open [Google Apps Script](https://script.google.com/) and sign in with your Google account.
 2. Click **New project**.
 3. **Delete** all the default code in the editor.
-4. Open the [`Code.gs`](Code.gs) file from this project, **copy everything**, and paste it into the Apps Script editor.
+4. Open the [`Code.gs`](apps_script/Code.gs) file from this project (under `apps_script/`), **copy everything**, and paste it into the Apps Script editor.
 5. **Important:** Change the password on this line to something only you know:
    ```javascript
    const AUTH_KEY = "your-secret-password-here";
@@ -200,6 +200,21 @@ This project focuses entirely on the **Apps Script** relay — a free Google acc
 | `front_domain` | `www.google.com` | Domain shown to the firewall/filter |
 | `verify_ssl` | `true` | Verify TLS certificates |
 | `script_ids` | — | Multiple Script IDs for load balancing (array) |
+| `block_hosts` | `[]` | Hosts that must never be tunneled (return HTTP 403). Supports exact names (`ads.example.com`) or leading-dot suffixes (`.doubleclick.net`). |
+| `bypass_hosts` | `["localhost", ".local", ".lan", ".home.arpa"]` | Hosts that go direct (no MITM, no relay). Useful for LAN resources or sites that break under MITM. |
+| `direct_google_exclude` | see [config.example.json](config.example.json) | Google apps that must use the MITM relay path instead of the fast direct tunnel. |
+| `hosts` | `{}` | Manual DNS override: map a hostname to a specific IP. |
+
+### Optional Dependencies
+
+Install everything from [`requirements.txt`](requirements.txt). All listed packages are optional — the proxy runs with no third-party dependencies in basic modes, but without them you lose features:
+
+| Package | Provides |
+|---------|----------|
+| `cryptography` | MITM TLS interception (required for `apps_script` mode with HTTPS sites) |
+| `h2` | HTTP/2 multiplexing to the Apps Script relay (significantly faster) |
+| `brotli` | Decompression of `Content-Encoding: br` responses |
+| `zstandard` | Decompression of `Content-Encoding: zstd` responses |
 
 ### Load Balancing
 
@@ -255,16 +270,26 @@ python3 main.py --no-cert-check          # Skip automatic CA install check on st
 
 ## Project Files
 
-| File | What It Does |
-|------|-------------|
-| `main.py` | Starts the proxy |
-| `proxy_server.py` | Handles browser connections |
-| `domain_fronter.py` | Apps Script relay client (fronted through Google) |
-| `h2_transport.py` | Faster connections using HTTP/2 (optional) |
-| `mitm.py` | Handles HTTPS certificate generation |
-| `cert_installer.py` | Cross-platform CA certificate installer (Windows/macOS/Linux + Firefox) |
-| `Code.gs` | The relay script you deploy to Google Apps Script |
-| `config.example.json` | Example config — copy to `config.json` |
+```
+MasterHttpRelayVPN/
+├── main.py                    # Entry point: starts the proxy
+├── config.example.json        # Copy to config.json and fill in your values
+├── requirements.txt           # Optional Python dependencies
+├── apps_script/
+│   └── Code.gs                # The relay script you deploy to Google Apps Script
+├── ca/                        # Generated MITM CA (do NOT share)
+│   ├── ca.crt
+│   └── ca.key
+└── src/                       # Proxy implementation
+    ├── proxy_server.py        # Accepts HTTP CONNECT and SOCKS5
+    ├── domain_fronter.py      # Apps Script relay client (fronted through Google)
+    ├── h2_transport.py        # Optional HTTP/2 multiplexing
+    ├── mitm.py                # On-the-fly TLS interception
+    ├── cert_installer.py      # Cross-platform CA installer (Windows/macOS/Linux + Firefox)
+    ├── codec.py               # Content-Encoding decoder (gzip/deflate/br/zstd)
+    ├── constants.py           # Tunable defaults and shared data
+    └── logging_utils.py       # Colored, aligned log formatter
+```
 
 ---
 
@@ -280,6 +305,7 @@ python3 main.py --no-cert-check          # Skip automatic CA install check on st
 | Connection timeout | Try a different `google_ip` or check your internet connection |
 | Slow browsing | Deploy multiple `Code.gs` copies and use `script_ids` array for load balancing |
 | `502 Bad JSON` error | Google returned an unexpected response (HTML instead of JSON). Causes: wrong `script_id`, Apps Script daily quota exhausted, or the deployment wasn't re-created after editing `Code.gs`. Check your `script_id` and create a **new deployment** if you recently changed `Code.gs`. |
+| Telegram works on HTTP proxy but not on SOCKS5 | **Expected.** SOCKS5 clients resolve hostnames locally and connect to raw IPs, so Telegram's MTProto-obfuscated bytes reach a blocked IP that we can neither direct-tunnel nor intercept. Configure Telegram as an **HTTP proxy** (`127.0.0.1:8085`) instead — it sends hostnames, which the proxy handles via SNI-rewrite through Google. |
 
 ---
 
