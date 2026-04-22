@@ -32,6 +32,14 @@
           <span>Home</span>
         </button>
 
+        <button class="nav-item" data-tab="setup" id="nav-setup">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+            <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+          </svg>
+          <span>Setup</span>
+        </button>
+
         <button class="nav-item" data-tab="settings" id="nav-settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
@@ -174,6 +182,91 @@
         </div>
       </section>
 
+      <!-- Setup Guide Tab -->
+      <section class="tab-content" id="tab-setup">
+        <div class="setup-container">
+          <div class="settings-header">
+            <h2>Setup Guide</h2>
+            <p class="settings-subtitle">Follow these steps to configure your relay proxy</p>
+          </div>
+
+          <!-- Step 1: Auth Key -->
+          <div class="setup-step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <h3>Choose Your Auth Key</h3>
+              <p>Pick a secret password. This same key must be used in both the app and your Apps Script.</p>
+              <div class="form-field">
+                <div class="input-with-toggle">
+                  <input type="text" id="setup-auth-key" placeholder="Enter a strong secret password" spellcheck="false" />
+                  <button class="toggle-visibility" onclick="app.togglePassword('setup-auth-key')" title="Show/Hide">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="app.saveAuthKeyAndCopyCode()" id="btn-copy-code">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Save Auth Key & Copy Code.gs to Clipboard
+              </button>
+            </div>
+          </div>
+
+          <!-- Step 2: Create Apps Script -->
+          <div class="setup-step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <h3>Create Google Apps Script</h3>
+              <ol class="setup-instructions">
+                <li>Go to <a href="#" onclick="app.openExternal('https://script.google.com'); return false;" class="setup-link">script.google.com</a> and click <strong>New Project</strong></li>
+                <li>Delete all the default code in the editor</li>
+                <li>Paste the code you copied in Step 1 <kbd>Ctrl+V</kbd></li>
+                <li>Click <strong>Deploy → New deployment</strong></li>
+                <li>Click the ⚙️ gear icon → select <strong>Web app</strong></li>
+                <li>Set <strong>Execute as:</strong> → <em>Me</em></li>
+                <li>Set <strong>Who has access:</strong> → <em>Anyone</em></li>
+                <li>Click <strong>Deploy</strong> and copy the <strong>Deployment ID</strong></li>
+              </ol>
+              <div class="setup-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>For load balancing, repeat this process multiple times with different Google accounts. All deployments must use the <strong>same Auth Key</strong>.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Paste Deployment ID -->
+          <div class="setup-step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h3>Add Deployment ID</h3>
+              <p>Paste the Deployment ID you copied from Apps Script:</p>
+              <div class="form-field">
+                <div class="script-id-input-row" style="max-width: 100%;">
+                  <input type="text" id="setup-script-id" placeholder="Paste your Deployment ID here" spellcheck="false" />
+                  <button class="btn btn-sm btn-add-id" onclick="app.addScriptIdFromSetup()" title="Add">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                </div>
+              </div>
+              <p class="field-note" id="setup-id-status">No deployments added yet</p>
+            </div>
+          </div>
+
+          <!-- Step 4: Connect -->
+          <div class="setup-step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <h3>Connect!</h3>
+              <p>Go to the <strong>Home</strong> tab and click <strong>Connect</strong>. Your proxy will be ready at:</p>
+              <div class="setup-proxy-info">
+                <code>HTTP  → 127.0.0.1:8085</code>
+                <code>SOCKS5 → 127.0.0.1:1080</code>
+              </div>
+              <p class="field-note">Configure your browser or system proxy settings to use these addresses.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Settings Tab -->
       <section class="tab-content" id="tab-settings">
         <div class="settings-container">
@@ -190,6 +283,17 @@
                 Relay Configuration
               </h3>
 
+
+              <div class="form-field">
+                <label for="cfg-auth-key">Auth Key</label>
+                <div class="input-with-toggle">
+                  <input type="password" id="cfg-auth-key" placeholder="Your secret password" spellcheck="false" />
+                  <button class="toggle-visibility" onclick="app.togglePassword('cfg-auth-key')" title="Show/Hide">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
               <div class="form-field">
                 <label>Script IDs (Deployment IDs) <span class="hint">— add multiple for load balancing</span></label>
                 <div class="script-ids-container" id="script-ids-container">
@@ -202,16 +306,6 @@
                   </div>
                 </div>
                 <p class="field-note" id="script-id-count">0 deployment(s) configured</p>
-              </div>
-
-              <div class="form-field">
-                <label for="cfg-auth-key">Auth Key</label>
-                <div class="input-with-toggle">
-                  <input type="password" id="cfg-auth-key" placeholder="Your secret password" spellcheck="false" />
-                  <button class="toggle-visibility" onclick="app.togglePassword('cfg-auth-key')" title="Show/Hide">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  </button>
-                </div>
               </div>
 
               <div class="form-row">
