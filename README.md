@@ -229,7 +229,7 @@ To increase speed, deploy `Code.gs` multiple times to different Apps Script proj
   ]
 }
 ```
-
+> ⚠️ **Note:** If you are using multiple deployments, the auth-keys must be identical. (All deployments must use the same auth-key.)
 ---
 
 ## Updating the Google Relay
@@ -316,7 +316,7 @@ MasterHttpRelayVPN/
 - **Change the default `AUTH_KEY`** in `Code.gs` before deploying.
 - **Don't share the `ca/` folder** — it contains your private certificate key.
 - Keep `listen_host` as `127.0.0.1` so only your computer can use the proxy.
-
+- Every google scripts deployment has limit of 20,000 requests in 24 hours
 ---
 
 ## Special Thanks
