@@ -72,6 +72,11 @@ def build(onefile: bool = False, debug: bool = False):
     if ca_dir.exists():
         cmd.extend(["--add-data", f"{ca_dir}{sep}ca"])
 
+    # Add Apps Script template
+    apps_script_dir = ROOT / "apps_script"
+    if apps_script_dir.exists():
+        cmd.extend(["--add-data", f"{apps_script_dir}{sep}apps_script"])
+
     # Hidden imports that PyInstaller might miss
     hidden = [
         "cryptography",

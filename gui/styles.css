@@ -1482,7 +1482,7 @@ code.block-code {
   color: var(--text-primary);
   font-size: 13px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  animation: toastIn var(--transition-normal) ease-out;
+  animation: toastIn var(--transition-normal) forwards;
   pointer-events: auto;
   min-width: 220px;
   max-width: 360px;
@@ -1509,7 +1509,7 @@ code.block-code {
 .toast.info .toast-icon { color: var(--accent); }
 
 .toast.hiding {
-  animation: toastOut var(--transition-normal) ease-in forwards;
+  animation: toastOut var(--transition-normal) forwards;
 }
 
 .toast-close {
