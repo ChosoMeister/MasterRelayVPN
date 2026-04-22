@@ -25,6 +25,8 @@ if getattr(sys, "frozen", False):
     # Running as PyInstaller bundle
     _BUNDLE = Path(sys._MEIPASS)
     _ROOT = Path(sys.executable).resolve().parent  # writable directory
+    if sys.platform == "darwin" and "Contents/MacOS" in str(_ROOT):
+        _ROOT = _ROOT.parent.parent.parent
 else:
     _BUNDLE = Path(__file__).resolve().parent
     _ROOT = _BUNDLE
@@ -244,7 +246,7 @@ class ProxyBridge:
     def _inject_stats_hooks(self, server: ProxyServer):
         """Monkey-patch the proxy server to track traffic statistics."""
         bridge = self
-        original_relay = server.fronter.relay_request
+        original_relay = server.fronter.relay
 
         async def tracked_relay(method, url, headers, body, **kwargs):
             bridge.request_count += 1
@@ -256,7 +258,7 @@ class ProxyBridge:
                 bridge.bytes_received += len(response)
             return response
 
-        server.fronter.relay_request = tracked_relay
+        server.fronter.relay = tracked_relay
 
     # ── Logs ───────────────────────────────────────────────────
 

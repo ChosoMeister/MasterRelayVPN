@@ -750,7 +750,7 @@ const app = {
 
   // ── Toast Notifications ─────────────────────────────────────
 
-  toast(message, type = 'info') {
+  toast(message, type = 'info', duration = 3000) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
@@ -763,15 +763,26 @@ const app = {
 
     toast.innerHTML = `
       <span class="toast-icon">${icons[type] || icons.info}</span>
-      <span>${this.escHtml(message)}</span>
+      <span class="toast-message" style="flex: 1;">${this.escHtml(message)}</span>
+      <button class="toast-close" title="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     `;
 
     container.appendChild(toast);
 
-    setTimeout(() => {
+    const closeBtn = toast.querySelector('.toast-close');
+    let timer = null;
+
+    const removeToast = () => {
+      if (timer) clearTimeout(timer);
       toast.classList.add('hiding');
       toast.addEventListener('animationend', () => toast.remove());
-    }, 3000);
+    };
+
+    closeBtn.addEventListener('click', removeToast);
+
+    if (duration > 0) {
+      timer = setTimeout(removeToast, duration);
+    }
   },
 };
 
