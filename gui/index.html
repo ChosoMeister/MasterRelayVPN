@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MasterVPN</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <nav id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <span class="brand-text">MasterVPN</span>
+        <span class="brand-version" id="app-version">v1.1.0</span>
+      </div>
+
+      <div class="nav-items">
+        <button class="nav-item active" data-tab="home" id="nav-home">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <span>Home</span>
+        </button>
+
+        <button class="nav-item" data-tab="settings" id="nav-settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Settings</span>
+        </button>
+
+        <button class="nav-item" data-tab="logs" id="nav-logs">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Logs</span>
+        </button>
+
+        <button class="nav-item" data-tab="cert" id="nav-cert">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span>Certificate</span>
+        </button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="connection-indicator" id="sidebar-status">
+          <span class="status-dot disconnected"></span>
+          <span class="status-label">Disconnected</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="content">
+      <!-- Home Tab -->
+      <section class="tab-content active" id="tab-home">
+        <div class="home-container">
+          <!-- Connection Card -->
+          <div class="connection-card" id="connection-card">
+            <div class="connection-ring" id="connection-ring">
+              <svg class="ring-svg" viewBox="0 0 200 200">
+                <circle class="ring-bg" cx="100" cy="100" r="90" />
+                <circle class="ring-progress" cx="100" cy="100" r="90" id="ring-progress" />
+              </svg>
+              <div class="ring-content">
+                <div class="connection-icon" id="connection-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18.36 6.64a9 9 0 0 1 .74 12.2" class="signal-wave wave-3"/>
+                    <path d="M15.54 9.46a5 5 0 0 1 .46 6.58" class="signal-wave wave-2"/>
+                    <path d="M12 12l.01.01" class="signal-dot" stroke-width="3"/>
+                    <path d="M5.64 6.64a9 9 0 0 0-.74 12.2" class="signal-wave wave-3"/>
+                    <path d="M8.46 9.46a5 5 0 0 0-.46 6.58" class="signal-wave wave-2"/>
+                  </svg>
+                </div>
+                <div class="connection-status" id="connection-status">Disconnected</div>
+              </div>
+            </div>
+
+            <button class="connect-btn" id="connect-btn" onclick="app.toggleConnection()">
+              <span class="btn-text">Connect</span>
+              <span class="btn-loader" id="btn-loader"></span>
+            </button>
+          </div>
+
+          <!-- Stats Row -->
+          <div class="stats-row">
+            <div class="stat-card">
+              <div class="stat-icon upload">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="17 11 12 6 7 11"/>
+                  <line x1="12" y1="6" x2="12" y2="18"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-upload">0 B</span>
+                <span class="stat-label">Upload</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon download">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="7 13 12 18 17 13"/>
+                  <line x1="12" y1="18" x2="12" y2="6"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-download">0 B</span>
+                <span class="stat-label">Download</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon time">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-uptime">00:00:00</span>
+                <span class="stat-label">Uptime</span>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-icon requests">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+              </div>
+              <div class="stat-info">
+                <span class="stat-value" id="stat-requests">0</span>
+                <span class="stat-label">Requests</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Proxy Info -->
+          <div class="proxy-info" id="proxy-info">
+            <div class="proxy-row">
+              <span class="proxy-label">HTTP Proxy</span>
+              <span class="proxy-value" id="proxy-http">127.0.0.1:8085</span>
+              <button class="copy-btn" onclick="app.copyToClipboard('proxy-http')" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+            <div class="proxy-row" id="socks5-row">
+              <span class="proxy-label">SOCKS5 Proxy</span>
+              <span class="proxy-value" id="proxy-socks5">127.0.0.1:1080</span>
+              <button class="copy-btn" onclick="app.copyToClipboard('proxy-socks5')" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Tab -->
+      <section class="tab-content" id="tab-settings">
+        <div class="settings-container">
+          <div class="settings-header">
+            <h2>Settings</h2>
+            <p class="settings-subtitle">Configure your VPN connection</p>
+          </div>
+
+          <div class="settings-grid">
+            <!-- Relay Settings -->
+            <div class="settings-group">
+              <h3 class="group-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                Relay Configuration
+              </h3>
+
+              <div class="form-field">
+                <label>Script IDs (Deployment IDs) <span class="hint">— add multiple for load balancing</span></label>
+                <div class="script-ids-container" id="script-ids-container">
+                  <div class="script-ids-list" id="script-ids-list"></div>
+                  <div class="script-id-input-row">
+                    <input type="text" id="cfg-script-id-input" placeholder="Paste Deployment ID and press Enter" spellcheck="false" />
+                    <button class="btn btn-sm btn-add-id" onclick="app.addScriptId()" id="btn-add-script-id" title="Add ID">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <p class="field-note" id="script-id-count">0 deployment(s) configured</p>
+              </div>
+
+              <div class="form-field">
+                <label for="cfg-auth-key">Auth Key</label>
+                <div class="input-with-toggle">
+                  <input type="password" id="cfg-auth-key" placeholder="Your secret password" spellcheck="false" />
+                  <button class="toggle-visibility" onclick="app.togglePassword('cfg-auth-key')" title="Show/Hide">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="cfg-google-ip">Google IP</label>
+                  <input type="text" id="cfg-google-ip" placeholder="216.239.38.120" spellcheck="false" />
+                </div>
+                <div class="form-field">
+                  <label for="cfg-front-domain">Front Domain</label>
+                  <input type="text" id="cfg-front-domain" placeholder="www.google.com" spellcheck="false" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Network Settings -->
+            <div class="settings-group">
+              <h3 class="group-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                Network
+              </h3>
+
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="cfg-listen-host">Listen Host</label>
+                  <input type="text" id="cfg-listen-host" placeholder="127.0.0.1" spellcheck="false" />
+                </div>
+                <div class="form-field">
+                  <label for="cfg-listen-port">HTTP Port</label>
+                  <input type="number" id="cfg-listen-port" placeholder="8085" min="1" max="65535" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="cfg-socks5-port">SOCKS5 Port</label>
+                  <input type="number" id="cfg-socks5-port" placeholder="1080" min="1" max="65535" />
+                </div>
+                <div class="form-field toggle-field">
+                  <label>SOCKS5 Enabled</label>
+                  <label class="toggle" for="cfg-socks5-enabled">
+                    <input type="checkbox" id="cfg-socks5-enabled" checked />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-field">
+                  <label for="cfg-log-level">Log Level</label>
+                  <select id="cfg-log-level">
+                    <option value="DEBUG">DEBUG</option>
+                    <option value="INFO" selected>INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                  </select>
+                </div>
+                <div class="form-field toggle-field">
+                  <label>Verify SSL</label>
+                  <label class="toggle" for="cfg-verify-ssl">
+                    <input type="checkbox" id="cfg-verify-ssl" checked />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Host Rules -->
+            <div class="settings-group full-width">
+              <h3 class="group-title">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                Host Rules
+              </h3>
+
+              <div class="form-field">
+                <label for="cfg-block-hosts">Blocked Hosts <span class="hint">(one per line)</span></label>
+                <textarea id="cfg-block-hosts" rows="3" placeholder="example.com&#10;.blocked-domain.com" spellcheck="false"></textarea>
+              </div>
+
+              <div class="form-field">
+                <label for="cfg-bypass-hosts">Bypass Hosts <span class="hint">(one per line, direct connection)</span></label>
+                <textarea id="cfg-bypass-hosts" rows="3" placeholder="localhost&#10;.local&#10;.lan" spellcheck="false"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button class="btn btn-secondary" onclick="app.resetConfig()" id="btn-reset-config">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Reset
+            </button>
+            <button class="btn btn-primary" onclick="app.saveConfig()" id="btn-save-config">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save Settings
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Logs Tab -->
+      <section class="tab-content" id="tab-logs">
+        <div class="logs-container">
+          <div class="logs-header">
+            <h2>Logs</h2>
+            <div class="logs-actions">
+              <label class="toggle mini" for="log-auto-scroll">
+                <input type="checkbox" id="log-auto-scroll" checked />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label">Auto-scroll</span>
+              <button class="btn btn-sm" onclick="app.clearLogs()" id="btn-clear-logs">Clear</button>
+            </div>
+          </div>
+          <div class="log-viewer" id="log-viewer">
+            <div class="log-empty">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.3">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+              <p>No logs yet. Connect to start logging.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Certificate Tab -->
+      <section class="tab-content" id="tab-cert">
+        <div class="cert-container">
+          <div class="cert-header">
+            <h2>Certificate</h2>
+            <p class="cert-subtitle">MITM CA certificate for HTTPS interception</p>
+          </div>
+
+          <div class="cert-status-card" id="cert-status-card">
+            <div class="cert-icon" id="cert-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <div class="cert-info">
+              <h3 id="cert-status-text">Checking...</h3>
+              <p id="cert-status-detail">Verifying CA certificate installation</p>
+            </div>
+          </div>
+
+          <div class="cert-actions">
+            <button class="btn btn-primary" onclick="app.installCert()" id="btn-install-cert">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Install Certificate
+            </button>
+            <button class="btn btn-secondary" onclick="app.checkCert()" id="btn-check-cert">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              Check Status
+            </button>
+          </div>
+
+          <div class="cert-help">
+            <h4>Why is this needed?</h4>
+            <p>In Apps Script mode, the proxy decrypts and re-encrypts HTTPS traffic locally. A trusted CA certificate is required to avoid security warnings in your browser.</p>
+            <ul>
+              <li>The certificate is <strong>local only</strong> — it never leaves your machine</li>
+              <li>A new certificate is generated on first run</li>
+              <li>You can regenerate it by deleting the <code>ca/</code> folder</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
