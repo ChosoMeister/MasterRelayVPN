@@ -433,11 +433,12 @@
       <!-- Certificate Tab -->
       <section class="tab-content" id="tab-cert">
         <div class="cert-container">
-          <div class="cert-header">
-            <h2>Certificate</h2>
-            <p class="cert-subtitle">MITM CA certificate for HTTPS interception</p>
+          <div class="settings-header">
+            <h2>SSL Certificate</h2>
+            <p class="settings-subtitle">Manage the MITM CA certificate for HTTPS interception</p>
           </div>
 
+          <!-- Status Card -->
           <div class="cert-status-card" id="cert-status-card">
             <div class="cert-icon" id="cert-icon">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -446,28 +447,140 @@
             </div>
             <div class="cert-info">
               <h3 id="cert-status-text">Checking...</h3>
-              <p id="cert-status-detail">Verifying CA certificate installation</p>
+              <p id="cert-status-detail">Verifying CA certificate</p>
+              <div class="cert-details" id="cert-details" style="display:none;">
+                <span class="cert-detail-item" id="cert-cn"></span>
+                <span class="cert-detail-item" id="cert-expiry"></span>
+                <span class="cert-detail-item" id="cert-fingerprint"></span>
+              </div>
             </div>
           </div>
 
+          <!-- Cert Actions -->
           <div class="cert-actions">
-            <button class="btn btn-primary" onclick="app.installCert()" id="btn-install-cert">
+            <button class="btn btn-primary" onclick="app.downloadCert()" id="btn-download-cert">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Install Certificate
+              Download Certificate
             </button>
             <button class="btn btn-secondary" onclick="app.checkCert()" id="btn-check-cert">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
               Check Status
             </button>
+            <button class="btn btn-danger-outline" onclick="app.regenerateCert()" id="btn-regen-cert">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Regenerate
+            </button>
           </div>
 
+          <!-- Installation Guides -->
+          <div class="cert-guides">
+            <h3 class="group-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              Installation Guide
+            </h3>
+
+            <!-- OS Tabs -->
+            <div class="guide-tabs">
+              <button class="guide-tab active" onclick="app.switchGuide('windows')" id="guide-tab-windows">Windows</button>
+              <button class="guide-tab" onclick="app.switchGuide('macos')" id="guide-tab-macos">macOS</button>
+              <button class="guide-tab" onclick="app.switchGuide('linux')" id="guide-tab-linux">Linux</button>
+              <button class="guide-tab" onclick="app.switchGuide('firefox')" id="guide-tab-firefox">Firefox</button>
+              <button class="guide-tab" onclick="app.switchGuide('chrome')" id="guide-tab-chrome">Chrome / Edge</button>
+            </div>
+
+            <!-- Windows Guide -->
+            <div class="guide-content active" id="guide-windows">
+              <ol class="setup-instructions">
+                <li>Click <strong>Download Certificate</strong> above to save <code>ca.crt</code></li>
+                <li>Double-click the downloaded <code>ca.crt</code> file</li>
+                <li>Click <strong>Install Certificate</strong></li>
+                <li>Select <strong>Local Machine</strong> (or Current User)</li>
+                <li>Choose <strong>Place all certificates in the following store</strong></li>
+                <li>Click <strong>Browse</strong> and select <strong>Trusted Root Certification Authorities</strong></li>
+                <li>Click <strong>OK</strong>, then <strong>Next</strong>, then <strong>Finish</strong></li>
+              </ol>
+              <div class="setup-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>After installation, restart your browser for the changes to take effect.</span>
+              </div>
+            </div>
+
+            <!-- macOS Guide -->
+            <div class="guide-content" id="guide-macos">
+              <ol class="setup-instructions">
+                <li>Click <strong>Download Certificate</strong> above to save <code>ca.crt</code></li>
+                <li>Double-click the downloaded file — <strong>Keychain Access</strong> will open</li>
+                <li>The certificate will appear in <strong>System</strong> keychain</li>
+                <li>Double-click the certificate <strong>MasterHttpRelayVPN</strong></li>
+                <li>Expand <strong>Trust</strong> section</li>
+                <li>Set <strong>When using this certificate</strong> to <strong>Always Trust</strong></li>
+                <li>Close the window and enter your password to confirm</li>
+              </ol>
+              <div class="setup-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>Or use terminal: <code>sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.crt</code></span>
+              </div>
+            </div>
+
+            <!-- Linux Guide -->
+            <div class="guide-content" id="guide-linux">
+              <ol class="setup-instructions">
+                <li>Click <strong>Download Certificate</strong> above to save <code>ca.crt</code></li>
+                <li>Copy to system CA store:
+                  <code class="block-code">sudo cp ca.crt /usr/local/share/ca-certificates/mastervpn-ca.crt</code>
+                </li>
+                <li>Update CA store:
+                  <code class="block-code">sudo update-ca-certificates</code>
+                </li>
+              </ol>
+              <div class="setup-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>On Fedora/RedHat, use <code>/etc/pki/ca-trust/source/anchors/</code> and run <code>sudo update-ca-trust</code></span>
+              </div>
+            </div>
+
+            <!-- Firefox Guide -->
+            <div class="guide-content" id="guide-firefox">
+              <ol class="setup-instructions">
+                <li>Click <strong>Download Certificate</strong> above to save <code>ca.crt</code></li>
+                <li>Open Firefox — go to <strong>Settings</strong> (about:preferences)</li>
+                <li>Search for <strong>Certificates</strong> in the search bar</li>
+                <li>Click <strong>View Certificates</strong></li>
+                <li>Go to the <strong>Authorities</strong> tab</li>
+                <li>Click <strong>Import</strong> and select the downloaded <code>ca.crt</code></li>
+                <li>Check <strong>Trust this CA to identify websites</strong></li>
+                <li>Click <strong>OK</strong></li>
+              </ol>
+              <div class="setup-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>Firefox uses its own certificate store — it ignores system certificates by default.</span>
+              </div>
+            </div>
+
+            <!-- Chrome / Edge Guide -->
+            <div class="guide-content" id="guide-chrome">
+              <ol class="setup-instructions">
+                <li>Chrome and Edge use the <strong>system certificate store</strong></li>
+                <li>Follow the <strong>Windows</strong> or <strong>macOS</strong> guide above to install the certificate system-wide</li>
+                <li>After installation, restart Chrome / Edge</li>
+                <li>Navigate to <code>chrome://settings/certificates</code> to verify</li>
+              </ol>
+              <div class="setup-tip">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                <span>If you still see warnings, try clearing the browser cache and DNS: <code>chrome://net-internals/#dns</code></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Why needed -->
           <div class="cert-help">
             <h4>Why is this needed?</h4>
-            <p>In Apps Script mode, the proxy decrypts and re-encrypts HTTPS traffic locally. A trusted CA certificate is required to avoid security warnings in your browser.</p>
+            <p>In Apps Script mode, the proxy decrypts and re-encrypts HTTPS traffic locally. A trusted CA certificate prevents security warnings in your browser.</p>
             <ul>
               <li>The certificate is <strong>local only</strong> — it never leaves your machine</li>
-              <li>A new certificate is generated on first run</li>
-              <li>You can regenerate it by deleting the <code>ca/</code> folder</li>
+              <li>A new certificate is generated automatically on first run</li>
+              <li>You can <strong>Regenerate</strong> it anytime from this page</li>
+              <li>Each certificate is valid for <strong>10 years</strong></li>
             </ul>
           </div>
         </div>

@@ -269,27 +269,94 @@ class ProxyBridge:
     # ── Certificate ────────────────────────────────────────────
 
     def check_cert(self) -> dict:
-        """Check if MITM CA certificate is trusted."""
+        """Check if MITM CA certificate exists and is trusted."""
         try:
             if not os.path.exists(CA_CERT_FILE):
-                return {"trusted": False, "error": "CA certificate file not found. Run proxy once to generate it."}
+                return {"exists": False, "trusted": False, "error": "Certificate not generated yet. Click 'Regenerate' to create one."}
 
             trusted = is_ca_trusted(CA_CERT_FILE)
-            return {"trusted": trusted}
+            info = self._read_cert_info()
+            return {"exists": True, "trusted": trusted, **info}
         except Exception as e:
-            return {"trusted": False, "error": str(e)}
+            return {"exists": False, "trusted": False, "error": str(e)}
 
-    def install_cert(self) -> dict:
-        """Install the MITM CA certificate."""
+    def get_cert_info(self) -> dict:
+        """Return certificate details (CN, expiry, fingerprint)."""
+        try:
+            if not os.path.exists(CA_CERT_FILE):
+                return {"exists": False}
+            info = self._read_cert_info()
+            return {"exists": True, **info}
+        except Exception as e:
+            return {"exists": False, "error": str(e)}
+
+    def _read_cert_info(self) -> dict:
+        """Internal: parse the CA cert and extract display info."""
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes
+        with open(CA_CERT_FILE, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        cn = cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)
+        cn_value = cn[0].value if cn else "Unknown"
+        fp = cert.fingerprint(hashes.SHA256()).hex(":")
+        return {
+            "cn": cn_value,
+            "expiry": cert.not_valid_after_utc.strftime("%Y-%m-%d"),
+            "fingerprint": fp[:23] + "...",  # show first 8 octets
+        }
+
+    def download_cert(self) -> dict:
+        """Trigger native save-file dialog to export the CA certificate."""
         try:
             if not os.path.exists(CA_CERT_FILE):
                 from mitm import MITMCertManager
-                MITMCertManager()  # side-effect: creates ca/ca.crt
+                MITMCertManager()
+
+            window = webview.windows[0] if webview.windows else None
+            if not window:
+                return {"success": False, "error": "No GUI window available"}
+
+            dest = window.create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename="MasterVPN-CA.crt",
+                file_types=("Certificate Files (*.crt;*.pem)", "All Files (*.*)"),
+            )
+            if dest:
+                import shutil
+                shutil.copy2(CA_CERT_FILE, dest)
+                return {"success": True, "path": str(dest)}
+            return {"success": False, "error": "Cancelled"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def regenerate_cert(self) -> dict:
+        """Delete existing CA cert/key and generate a fresh pair."""
+        try:
+            from mitm import CA_KEY_FILE as _key, CA_DIR as _dir
+            # Remove old files
+            for f in (CA_CERT_FILE, _key):
+                if os.path.exists(f):
+                    os.remove(f)
+            # Generate new
+            from mitm import MITMCertManager
+            MITMCertManager()
+            info = self._read_cert_info()
+            return {"success": True, **info}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def install_cert(self) -> dict:
+        """Install the MITM CA certificate into the system trust store."""
+        try:
+            if not os.path.exists(CA_CERT_FILE):
+                from mitm import MITMCertManager
+                MITMCertManager()
 
             ok = install_ca(CA_CERT_FILE)
             return {"success": ok, "error": None if ok else "Installation failed. Try running as admin."}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
     def test_connection(self) -> dict:
         """Test the relay connection."""
