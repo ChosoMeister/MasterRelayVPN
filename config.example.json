@@ -31,7 +31,12 @@
 		"calendar.google.com",
 		"drive.google.com",
 		"docs.google.com",
-		"chat.google.com"
+		"chat.google.com",
+		"maps.google.com",
+		"play.google.com",
+		"translate.google.com",
+		"assistant.google.com",
+		"lens.google.com"
 	],
 	"direct_google_allow": [
 		"www.google.com",

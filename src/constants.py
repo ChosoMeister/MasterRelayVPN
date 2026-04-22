@@ -61,6 +61,11 @@ FRONT_SNI_POOL_GOOGLE: tuple[str, ...] = (
     "drive.google.com",
     "docs.google.com",
     "calendar.google.com",
+    "maps.google.com",
+    "chat.google.com",
+    "translate.google.com",
+    "play.google.com",
+    "lens.google.com",
 )
 
 
@@ -92,6 +97,9 @@ GOOGLE_DIRECT_EXACT_EXCLUDE = frozenset({
     "classroom.google.com",
     "keep.google.com",
     "play.google.com",
+    "translate.google.com",
+    "assistant.google.com",
+    "lens.google.com",
 })
 GOOGLE_DIRECT_SUFFIX_EXCLUDE: tuple[str, ...] = (
     ".meet.google.com",
