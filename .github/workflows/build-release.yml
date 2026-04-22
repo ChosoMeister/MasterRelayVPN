@@ -1,34 +1,22 @@
-name: Build & Release
+name: Build and Release
 
 on:
   push:
     tags:
-      - 'v*'
-
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.2.0)'
+        description: "Release version (e.g. v1.2.0)"
         required: true
-        default: 'v1.0.0'
+        default: "v1.0.0"
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            artifact: MasterVPN.exe
-            asset_name: MasterVPN-Windows-x64.exe
-          - os: macos-latest
-            artifact: MasterVPN.app
-            asset_name: MasterVPN-macOS-arm64.zip
-
-    runs-on: ${{ matrix.os }}
-
+  build-windows:
+    runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,115 +24,111 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pywebview pyinstaller
+          pip install pyinstaller
+        shell: cmd
 
-      # ── Windows Build ──────────────────────────────────────────
-      - name: Build (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          python build_app.py --onefile --clean
+      - name: Build executable
+        run: python build_app.py --onefile --clean
+        shell: cmd
 
-      - name: Prepare artifact (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          copy dist\MasterVPN.exe MasterVPN.exe
-
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MasterVPN-Windows-x64
-          path: MasterVPN.exe
+          path: dist/MasterVPN.exe
           retention-days: 7
 
-      # ── macOS Build ────────────────────────────────────────────
-      - name: Build (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          python build_app.py --clean
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Prepare artifact (macOS)
-        if: runner.os == 'macOS'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build app bundle
+        run: python build_app.py --clean
+
+      - name: Create zip
         run: |
           cd dist
-          # Create a zip of the .app bundle for distribution
           if [ -d "MasterVPN.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS-arm64.zip
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS.zip
           else
-            # onedir fallback — zip the folder
-            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS-arm64.zip
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS.zip
           fi
 
-      - name: Upload artifact (macOS)
-        if: runner.os == 'macOS'
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MasterVPN-macOS-arm64
-          path: MasterVPN-macOS-arm64.zip
+          name: MasterVPN-macOS
+          path: MasterVPN-macOS.zip
           retention-days: 7
 
   release:
-    needs: build
+    needs:
+      - build-windows
+      - build-macos
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-
     steps:
-      - name: Set version
-        id: version
+      - name: Determine tag
+        id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download Windows artifact
+      - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
           name: MasterVPN-Windows-x64
-          path: ./artifacts
+          path: artifacts
 
-      - name: Download macOS artifact
+      - name: Download macOS build
         uses: actions/download-artifact@v4
         with:
-          name: MasterVPN-macOS-arm64
-          path: ./artifacts
+          name: MasterVPN-macOS
+          path: artifacts
 
-      - name: List artifacts
-        run: ls -lhR ./artifacts
+      - name: List files
+        run: ls -lhR artifacts/
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: MasterVPN ${{ steps.version.outputs.tag }}
-          body: |
-            ## MasterVPN ${{ steps.version.outputs.tag }}
-
-            ### Downloads
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | 🪟 Windows x64 | `MasterVPN-Windows-x64.exe` | Portable — just run it |
-            | 🍎 macOS arm64 | `MasterVPN-macOS-arm64.zip` | Extract and run MasterVPN.app |
-
-            ### ⚠️ First Run
-            - **Windows:** You may see "Windows protected your PC" — click **More info → Run anyway**
-            - **macOS:** Right-click the app → Open (first time only, to bypass Gatekeeper)
-
-            ### Features
-            - 🖥️ GUI with dark theme (no terminal needed)
-            - ⚡ Multi Script ID load balancing
-            - 🔒 MITM certificate management
-            - 📊 Real-time traffic stats and logs
+          tag_name: ${{ steps.tag.outputs.version }}
+          name: "MasterVPN ${{ steps.tag.outputs.version }}"
           draft: false
           prerelease: false
+          body: |
+            ## MasterVPN ${{ steps.tag.outputs.version }}
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | Windows x64 | `MasterVPN.exe` |
+            | macOS | `MasterVPN-macOS.zip` |
+
+            ### First Run
+            - **Windows**: Click More info then Run anyway if SmartScreen appears
+            - **macOS**: Right-click the app and select Open (first time only)
           files: |
-            ./artifacts/MasterVPN.exe
-            ./artifacts/MasterVPN-macOS-arm64.zip
+            artifacts/MasterVPN.exe
+            artifacts/MasterVPN-macOS.zip

@@ -113,6 +113,29 @@ class ProxyBridge:
             log.error("Invalid JSON in config: %s", e)
             return {}
 
+    # ── Setup Helpers ──────────────────────────────────────────
+
+    def get_code_gs(self, auth_key: str = "") -> str:
+        """Read Code.gs template and replace AUTH_KEY with user's key."""
+        code_gs_path = BASE / "apps_script" / "Code.gs"
+        if not code_gs_path.exists():
+            log.error("Code.gs not found at %s", code_gs_path)
+            return ""
+
+        code = code_gs_path.read_text(encoding="utf-8")
+
+        if auth_key:
+            code = code.replace(
+                'const AUTH_KEY = "CHANGE_ME_TO_A_STRONG_SECRET";',
+                f'const AUTH_KEY = "{auth_key}";',
+            )
+        return code
+
+    def open_url(self, url: str) -> None:
+        """Open a URL in the system's default browser."""
+        import webbrowser
+        webbrowser.open(url)
+
     # ── Proxy Control ──────────────────────────────────────────
 
     def start_proxy(self) -> dict:

@@ -59,6 +59,7 @@ const app = {
     this.renderScriptIds();
 
     this.setVal('cfg-auth-key', cfg.auth_key || '');
+    this.setVal('setup-auth-key', cfg.auth_key || '');
     this.setVal('cfg-google-ip', cfg.google_ip || '216.239.38.120');
     this.setVal('cfg-front-domain', cfg.front_domain || 'www.google.com');
     this.setVal('cfg-listen-host', cfg.listen_host || '127.0.0.1');
@@ -132,14 +133,24 @@ const app = {
 
   setupScriptIdInput() {
     const input = document.getElementById('cfg-script-id-input');
-    if (!input) return;
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        this.addScriptId();
-      }
-    });
-  },
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.addScriptId();
+        }
+      });
+    }
+
+    const setupInput = document.getElementById('setup-script-id');
+    if (setupInput) {
+      setupInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          this.addScriptIdFromSetup();
+        }
+      });
+    }},
 
   addScriptId() {
     const input = document.getElementById('cfg-script-id-input');
@@ -189,6 +200,107 @@ const app = {
       count.textContent = '1 deployment configured';
     } else {
       count.textContent = `${n} deployments configured — load balancing active ⚡`;
+    }
+
+    // Also update setup tab status
+    const setupStatus = document.getElementById('setup-id-status');
+    if (setupStatus) {
+      if (n === 0) {
+        setupStatus.textContent = 'No deployments added yet';
+      } else {
+        setupStatus.textContent = `✅ ${n} deployment(s) added — ready to connect!`;
+      }
+    }
+  },
+
+  // ── Setup Guide Methods ─────────────────────────────────────
+
+  codeGsTemplate: null,
+
+  async loadCodeGsTemplate() {
+    try {
+      const code = await this.api('get_code_gs');
+      if (code) this.codeGsTemplate = code;
+    } catch (e) {
+      // fallback: template is embedded in backend
+    }
+  },
+
+  async saveAuthKeyAndCopyCode() {
+    const authKey = document.getElementById('setup-auth-key').value.trim();
+    if (!authKey) {
+      this.toast('Enter an Auth Key first', 'error');
+      return;
+    }
+
+    // Save auth key to config
+    if (!this.config) this.config = {};
+    this.config.auth_key = authKey;
+
+    // Also update settings tab
+    this.setVal('cfg-auth-key', authKey);
+
+    // Save config
+    const cfg = this.gatherConfigForm();
+    cfg.auth_key = authKey;
+    await this.api('save_config', cfg);
+
+    // Get Code.gs with auth key embedded
+    let code = await this.api('get_code_gs', authKey);
+    if (!code) {
+      this.toast('Could not generate Code.gs', 'error');
+      return;
+    }
+
+    // Copy to clipboard
+    await this.writeClipboard(code);
+    this.toast('Auth Key saved & Code.gs copied to clipboard!', 'success');
+  },
+
+  addScriptIdFromSetup() {
+    const input = document.getElementById('setup-script-id');
+    const val = input.value.trim();
+    if (!val) return;
+
+    if (this.scriptIds.includes(val)) {
+      this.toast('This Deployment ID is already added', 'error');
+      return;
+    }
+
+    this.scriptIds.push(val);
+    input.value = '';
+    input.focus();
+    this.renderScriptIds();
+
+    // Auto-save config with new ID
+    const cfg = this.gatherConfigForm();
+    this.api('save_config', cfg).then(result => {
+      if (result && result.success) {
+        this.toast(`Deployment #${this.scriptIds.length} added & saved!`, 'success');
+      }
+    });
+  },
+
+  openExternal(url) {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.open_url) {
+      window.pywebview.api.open_url(url);
+    } else {
+      window.open(url, '_blank');
+    }
+  },
+
+  async writeClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
     }
   },
 
@@ -513,6 +625,8 @@ const app = {
       get_logs: () => [],
       check_cert: () => ({ trusted: false }),
       install_cert: () => ({ success: false, error: 'Run as GUI to install' }),
+      get_code_gs: (key) => `// Code.gs with AUTH_KEY = "${key || 'YOUR_KEY'}";\n// (Mock — full code available in GUI mode)`,
+      open_url: () => null,
     };
     return mocks[method] ? mocks[method](...args) : null;
   },
