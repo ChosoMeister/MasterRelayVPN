@@ -116,19 +116,19 @@ def build(onefile: bool = False, debug: bool = False):
             output = DIST / APP_NAME
             if system == "Windows":
                 output = output.with_suffix(".exe")
-            print(f"\n  ✅ Build successful: {output}")
+            print(f"\n  [OK] Build successful: {output}")
         else:
             output = DIST / APP_NAME
             if system == "Darwin":
                 app_bundle = DIST / f"{APP_NAME}.app"
                 if app_bundle.exists():
                     output = app_bundle
-            print(f"\n  ✅ Build successful: {output}/")
+            print(f"\n  [OK] Build successful: {output}/")
 
         size_mb = _dir_size(output) / (1024 * 1024) if output.exists() else 0
-        print(f"  📦 Size: {size_mb:.1f} MB")
+        print(f"  Size: {size_mb:.1f} MB")
     else:
-        print(f"\n  ❌ Build failed (exit code {result.returncode})")
+        print(f"\n  [FAIL] Build failed (exit code {result.returncode})")
         sys.exit(1)
 
 
@@ -149,7 +149,7 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Include debug console window")
     args = parser.parse_args()
 
-    print(f"\n  🔨 {APP_NAME} Build Tool")
+    print(f"\n  === {APP_NAME} Build Tool ===")
     print(f"  Platform: {platform.system()} {platform.machine()}")
     print(f"  Python: {sys.version.split()[0]}")
 
