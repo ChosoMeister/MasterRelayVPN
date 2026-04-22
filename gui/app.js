@@ -545,7 +545,37 @@ const app = {
       const result = await this.api('check_cert');
       this.updateCertUI(result);
     } catch (e) {
-      this.updateCertUI({ trusted: false, error: e.message });
+      this.updateCertUI({ exists: false, trusted: false, error: e.message });
+    }
+  },
+
+  async downloadCert() {
+    try {
+      const result = await this.api('download_cert');
+      if (result && result.success) {
+        this.toast('Certificate saved: ' + (result.path || 'MasterVPN-CA.crt'), 'success');
+      } else if (result?.error === 'Cancelled') {
+        // user cancelled — do nothing
+      } else {
+        this.toast(result?.error || 'Download failed', 'error');
+      }
+    } catch (e) {
+      this.toast('Certificate download failed', 'error');
+    }
+  },
+
+  async regenerateCert() {
+    if (!confirm('This will delete the current certificate and generate a new one.\n\nYou will need to re-install the new certificate in your browser/system.\n\nContinue?')) return;
+    try {
+      const result = await this.api('regenerate_cert');
+      if (result && result.success) {
+        this.toast('New certificate generated successfully', 'success');
+        this.updateCertUI({ exists: true, trusted: false, cn: result.cn, expiry: result.expiry, fingerprint: result.fingerprint });
+      } else {
+        this.toast(result?.error || 'Regeneration failed', 'error');
+      }
+    } catch (e) {
+      this.toast('Certificate regeneration failed', 'error');
     }
   },
 
@@ -554,25 +584,46 @@ const app = {
       const result = await this.api('install_cert');
       if (result && result.success) {
         this.toast('Certificate installed successfully', 'success');
-        this.updateCertUI({ trusted: true });
+        this.checkCert(); // refresh full state
       } else {
         this.toast(result?.error || 'Certificate installation failed', 'error');
-        this.updateCertUI({ trusted: false, error: result?.error });
       }
     } catch (e) {
       this.toast('Certificate installation failed', 'error');
     }
   },
 
+  switchGuide(platform) {
+    document.querySelectorAll('.guide-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.guide-content').forEach(c => c.classList.remove('active'));
+    const tab = document.getElementById('guide-tab-' + platform);
+    const content = document.getElementById('guide-' + platform);
+    if (tab) tab.classList.add('active');
+    if (content) content.classList.add('active');
+  },
+
   updateCertUI(result) {
     const icon = document.getElementById('cert-icon');
     const title = document.getElementById('cert-status-text');
     const detail = document.getElementById('cert-status-detail');
+    const details = document.getElementById('cert-details');
+    const cnEl = document.getElementById('cert-cn');
+    const expiryEl = document.getElementById('cert-expiry');
+    const fpEl = document.getElementById('cert-fingerprint');
 
     if (!result) {
       title.textContent = 'Unknown';
       detail.textContent = 'Could not check certificate status';
       icon.className = 'cert-icon';
+      if (details) details.style.display = 'none';
+      return;
+    }
+
+    if (!result.exists) {
+      icon.className = 'cert-icon not-generated';
+      title.textContent = 'No Certificate';
+      detail.textContent = result.error || 'Click "Regenerate" to create a new certificate';
+      if (details) details.style.display = 'none';
       return;
     }
 
@@ -583,7 +634,15 @@ const app = {
     } else {
       icon.className = 'cert-icon not-trusted';
       title.textContent = 'Certificate Not Trusted';
-      detail.textContent = result.error || 'Install the CA certificate to use HTTPS proxy';
+      detail.textContent = 'Download and install the certificate using the guide below';
+    }
+
+    // Show cert details
+    if (details && (result.cn || result.expiry || result.fingerprint)) {
+      details.style.display = 'flex';
+      if (cnEl) cnEl.textContent = 'CN: ' + (result.cn || 'Unknown');
+      if (expiryEl) expiryEl.textContent = 'Expires: ' + (result.expiry || 'Unknown');
+      if (fpEl) fpEl.textContent = 'SHA-256: ' + (result.fingerprint || 'Unknown');
     }
   },
 
@@ -623,8 +682,11 @@ const app = {
       get_status: () => ({ running: false }),
       get_stats: () => ({ bytes_sent: 0, bytes_received: 0, requests: 0 }),
       get_logs: () => [],
-      check_cert: () => ({ trusted: false }),
+      check_cert: () => ({ exists: true, trusted: false, cn: 'MasterHttpRelayVPN', expiry: '2036-04-22', fingerprint: 'ab:cd:ef:12:34:56:78:90...' }),
       install_cert: () => ({ success: false, error: 'Run as GUI to install' }),
+      download_cert: () => ({ success: false, error: 'Run as GUI to download' }),
+      regenerate_cert: () => ({ success: true, cn: 'MasterHttpRelayVPN', expiry: '2036-04-22', fingerprint: 'aa:bb:cc:dd:ee:ff:00:11...' }),
+      get_cert_info: () => ({ exists: true, cn: 'MasterHttpRelayVPN', expiry: '2036-04-22', fingerprint: 'ab:cd:ef:12:34:56:78:90...' }),
       get_code_gs: (key) => `// Code.gs with AUTH_KEY = "${key || 'YOUR_KEY'}";\n// (Mock — full code available in GUI mode)`,
       open_url: () => null,
     };
