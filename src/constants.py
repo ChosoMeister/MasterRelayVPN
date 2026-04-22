@@ -45,6 +45,30 @@ BATCH_WINDOW_MACRO      = 0.050   # 50 ms
 BATCH_MAX               = 50
 
 
+# ── Fan-out relay (parallel Apps Script instances) ────────────────────────
+# How long to ignore a script ID after it fails or is unreasonably slow.
+SCRIPT_BLACKLIST_TTL    = 600.0   # 10 minutes
+
+
+# ── SNI rotation pool ─────────────────────────────────────────────────────
+# Google-owned SNIs that share the same edge IPs as www.google.com.
+# When `front_domain` is a Google property, we rotate through this pool on
+# each new outbound TLS handshake so DPI systems don't see a constant
+# "always www.google.com" pattern from the client.
+FRONT_SNI_POOL_GOOGLE: tuple[str, ...] = (
+    "www.google.com",
+    "mail.google.com",
+    "drive.google.com",
+    "docs.google.com",
+    "calendar.google.com",
+)
+
+
+# ── Per-host stats ────────────────────────────────────────────────────────
+STATS_LOG_INTERVAL      = 300.0   # seconds — how often to log per-host totals
+STATS_LOG_TOP_N         = 10      # how many hosts to include in the log
+
+
 # ── Direct Google tunnel allow / exclude ──────────────────────────────────
 # Google web-apps whose real origin must go through the Apps Script relay
 # because direct SNI tunneling to them does not work reliably behind DPI.
