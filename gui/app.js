@@ -725,27 +725,48 @@ const app = {
     el.type = el.type === 'password' ? 'text' : 'password';
   },
 
-  copyToClipboard(id) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const text = el.textContent || el.value;
+  async copyToClipboard(id) {
+    await this.writeClipboard(id);
+    this.toast('Copied to clipboard', 'success');
+  },
+
+  async writeClipboard(payload) {
+    let text = payload;
+    // If payload is an element ID, extract its text
+    if (typeof payload === 'string' && document.getElementById(payload)) {
+      const el = document.getElementById(payload);
+      text = el.textContent || el.value;
+    }
+
+    if (!text) return;
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(() => {
-        this.toast('Copied to clipboard', 'success');
-      });
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (err) {
+        this.fallbackCopyTextToClipboard(text);
+      }
     } else {
-      // Fallback
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      this.toast('Copied to clipboard', 'success');
+      this.fallbackCopyTextToClipboard(text);
     }
+  },
+
+  fallbackCopyTextToClipboard(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '0';
+    ta.style.left = '0';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.error('Fallback: Oops, unable to copy', err);
+    }
+    document.body.removeChild(ta);
   },
 
   // ── Toast Notifications ─────────────────────────────────────

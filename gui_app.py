@@ -119,7 +119,7 @@ class ProxyBridge:
 
     def get_code_gs(self, auth_key: str = "") -> str:
         """Read Code.gs template and replace AUTH_KEY with user's key."""
-        code_gs_path = BASE / "apps_script" / "Code.gs"
+        code_gs_path = _BUNDLE / "apps_script" / "Code.gs"
         if not code_gs_path.exists():
             log.error("Code.gs not found at %s", code_gs_path)
             return ""
