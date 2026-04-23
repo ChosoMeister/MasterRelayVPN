@@ -96,6 +96,7 @@ def build(onefile: bool = False, debug: bool = False):
         "brotli",
         "zstandard",
         "webview",
+        "certifi",
     ]
     for h in hidden:
         cmd.extend(["--hidden-import", h])
