@@ -49,7 +49,10 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    runs-on: macos-latest
+    strategy:
+      matrix:
+        os: [macos-13, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,19 +75,19 @@ jobs:
         run: |
           cd dist
           if [ -d "MasterVPN.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS.zip
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS-${{ runner.arch }}.zip
           else
-            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS.zip
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS-${{ runner.arch }}.zip
           fi
 
       - name: Verify output
-        run: ls -lh MasterVPN-macOS.zip
+        run: ls -lh MasterVPN-macOS-${{ runner.arch }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: MasterVPN-macOS.zip
+          name: macos-build-${{ runner.arch }}
+          path: MasterVPN-macOS-${{ runner.arch }}.zip
           if-no-files-found: error
 
   release:
@@ -111,7 +114,8 @@ jobs:
         run: |
           mkdir -p release
           cp dist/windows-build/MasterVPN.exe release/MasterVPN-Windows-x64.exe
-          cp dist/macos-build/MasterVPN-macOS.zip release/MasterVPN-macOS.zip
+          cp dist/macos-build-X64/MasterVPN-macOS-X64.zip release/MasterVPN-macOS-Intel.zip
+          cp dist/macos-build-ARM64/MasterVPN-macOS-ARM64.zip release/MasterVPN-macOS-Silicon.zip
           echo "=== Release files ==="
           ls -lh release/
 
@@ -129,7 +133,8 @@ jobs:
             | Platform | File |
             |----------|------|
             | Windows x64 | `MasterVPN-Windows-x64.exe` |
-            | macOS | `MasterVPN-macOS.zip` |
+            | macOS (Apple Silicon) | `MasterVPN-macOS-Silicon.zip` |
+            | macOS (Intel) | `MasterVPN-macOS-Intel.zip` |
 
             ### First Run
             - **Windows**: Click More info then Run anyway if SmartScreen appears
@@ -142,4 +147,5 @@ jobs:
             - Real-time traffic stats and logs
           files: |
             release/MasterVPN-Windows-x64.exe
-            release/MasterVPN-macOS.zip
+            release/MasterVPN-macOS-Silicon.zip
+            release/MasterVPN-macOS-Intel.zip

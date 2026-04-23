@@ -382,7 +382,7 @@ def main():
     # Configure logging
     configure_logging("INFO")
     install_gui_handler()
-    print_banner(__version__)
+    # Skip print_banner in GUI mode to avoid UnicodeEncodeError on Windows --noconsole
 
     log.info("Starting MasterVPN GUI v%s", __version__)
 

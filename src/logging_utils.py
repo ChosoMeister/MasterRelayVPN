@@ -104,6 +104,15 @@ def _supports_color(stream) -> bool:
     return False
 
 
+def _supports_unicode(stream) -> bool:
+    if sys.platform != "win32":
+        return True
+    encoding = getattr(stream, "encoding", None)
+    if encoding:
+        return encoding.lower() in ("utf-8", "utf8", "cp65001")
+    return False
+
+
 # ─── formatter ─────────────────────────────────────────────────────────────
 
 class PrettyFormatter(logging.Formatter):
@@ -111,9 +120,10 @@ class PrettyFormatter(logging.Formatter):
 
     COMPONENT_WIDTH = 8
 
-    def __init__(self, *, use_color: bool):
+    def __init__(self, *, use_color: bool, use_unicode: bool = True):
         super().__init__()
         self.use_color = use_color
+        self.use_unicode = use_unicode
         self._start = time.time()
 
     # -- helpers ------------------------------------------------------------
@@ -128,7 +138,11 @@ class PrettyFormatter(logging.Formatter):
 
     def _fmt_level(self, levelname: str) -> str:
         label = LEVEL_LABEL.get(levelname, levelname[:5].ljust(5))
-        glyph = LEVEL_GLYPH.get(levelname, "·")
+        if self.use_unicode:
+            glyph = LEVEL_GLYPH.get(levelname, "·")
+        else:
+            glyph = {"DEBUG": "~", "INFO": "*", "WARNING": "!", "ERROR": "X", "CRITICAL": "X"}.get(levelname, "-")
+            
         style = LEVEL_STYLE.get(levelname, "")
         if self.use_color:
             return f"{style}{glyph} {label}{RESET}"
@@ -182,9 +196,10 @@ def configure(level: str = "INFO", *, stream=None) -> None:
     """
     stream = stream or sys.stderr
     use_color = _supports_color(stream)
+    use_unicode = _supports_unicode(stream)
 
     handler = logging.StreamHandler(stream)
-    handler.setFormatter(PrettyFormatter(use_color=use_color))
+    handler.setFormatter(PrettyFormatter(use_color=use_color, use_unicode=use_unicode))
     handler.set_name("mhrvpn.pretty")
 
     root = logging.getLogger()
@@ -236,13 +251,27 @@ def print_banner(version: str, *, stream=None) -> None:
 
     title = "MasterHttpRelayVPN"
     subtitle = f"Domain-Fronted Apps Script Relay · v{version}"
-    bar = "─" * (len(title) + len(subtitle) + 7)
-
-    print(f"{c(DIM)}{c(FG_GRAY)}{bar}{c(RESET)}", file=stream)
-    print(
-        f"  {c(BOLD)}{c(FG_CYAN)}{title}{c(RESET)}"
-        f"  {c(DIM)}·{c(RESET)}  {c(FG_GRAY)}{subtitle}{c(RESET)}",
-        file=stream,
-    )
-    print(f"{c(DIM)}{c(FG_GRAY)}{bar}{c(RESET)}", file=stream)
-    stream.flush()
+    
+    # Try with Unicode characters first
+    try:
+        bar = "─" * (len(title) + len(subtitle) + 7)
+        print(f"{c(DIM)}{c(FG_GRAY)}{bar}{c(RESET)}", file=stream)
+        print(
+            f"  {c(BOLD)}{c(FG_CYAN)}{title}{c(RESET)}"
+            f"  {c(DIM)}·{c(RESET)}  {c(FG_GRAY)}{subtitle}{c(RESET)}",
+            file=stream,
+        )
+        print(f"{c(DIM)}{c(FG_GRAY)}{bar}{c(RESET)}", file=stream)
+        stream.flush()
+    except UnicodeEncodeError:
+        # Fallback for Windows CP1252 terminals/PyInstaller without UTF-8
+        bar = "-" * (len(title) + len(subtitle) + 7)
+        print(f"{bar}", file=stream)
+        print(f"  {title}  -  {subtitle}", file=stream)
+        print(f"{bar}", file=stream)
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    except Exception:
+        pass
