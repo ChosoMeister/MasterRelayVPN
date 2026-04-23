@@ -847,7 +847,8 @@ class ProxyServer:
         writer._transport = new_transport
 
         # Step 2: open outgoing TLS to target IP with the safe SNI
-        ssl_ctx_client = ssl.create_default_context()
+        import certifi
+        ssl_ctx_client = ssl.create_default_context(cafile=certifi.where())
         if not self.fronter.verify_ssl:
             ssl_ctx_client.check_hostname = False
             ssl_ctx_client.verify_mode = ssl.CERT_NONE

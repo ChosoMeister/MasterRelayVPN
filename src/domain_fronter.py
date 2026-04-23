@@ -174,7 +174,8 @@ class DomainFronter:
     # ── helpers ───────────────────────────────────────────────────
 
     def _ssl_ctx(self) -> ssl.SSLContext:
-        ctx = ssl.create_default_context()
+        import certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
         if not self.verify_ssl:
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
