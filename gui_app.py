@@ -38,7 +38,7 @@ if str(_SRC) not in sys.path:
 import webview  # pywebview
 
 from cert_installer import install_ca, is_ca_trusted
-from constants import __version__
+from constants import DATA_DIR, __version__
 from gui_logger import get_gui_handler, install_gui_handler
 from logging_utils import configure as configure_logging, print_banner
 from mitm import CA_CERT_FILE
@@ -46,7 +46,8 @@ from proxy_server import ProxyServer
 
 log = logging.getLogger("GUI")
 
-CONFIG_PATH = _ROOT / "config.json"
+# Config path inside the writable DATA_DIR
+CONFIG_PATH = Path(DATA_DIR) / "config.json"
 CONFIG_EXAMPLE_PATH = _BUNDLE / "config.example.json"
 GUI_DIR = _BUNDLE / "gui"
 

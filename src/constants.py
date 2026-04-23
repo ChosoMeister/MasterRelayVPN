@@ -8,8 +8,37 @@ overridden from `config.json` where noted.
 from __future__ import annotations
 
 # ── Version ───────────────────────────────────────────────────────────────
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
+
+# ── Path resolution ───────────────────────────────────────────────────────
+def get_data_dir() -> str:
+    """Get a writable directory for config and CA certificates."""
+    import os
+    import sys
+    from pathlib import Path
+    
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        if sys.platform == "darwin" and "Contents/MacOS" in str(exe_dir):
+            root = exe_dir.parent.parent.parent
+        else:
+            root = exe_dir
+            
+        try:
+            test_file = root / ".test_write"
+            test_file.touch()
+            test_file.unlink()
+            return str(root)
+        except (OSError, IOError):
+            home_dir = Path.home() / ".mastervpn"
+            home_dir.mkdir(parents=True, exist_ok=True)
+            return str(home_dir)
+    else:
+        src_dir = Path(__file__).resolve().parent
+        return str(src_dir.parent)
+
+DATA_DIR = get_data_dir()
 
 # ── Size caps ─────────────────────────────────────────────────────────────
 MAX_REQUEST_BODY_BYTES  = 100 * 1024 * 1024   # 100 MB  — inbound browser body

@@ -10,6 +10,11 @@ on:
         description: "Release version (e.g. v1.2.0)"
         required: true
         default: "v1.0.0"
+      build_macos_x86:
+        description: "Build macOS Intel (x86_64) version"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -48,11 +53,8 @@ jobs:
           path: dist/MasterVPN.exe
           if-no-files-found: error
 
-  build-macos:
-    strategy:
-      matrix:
-        os: [macos-13, macos-latest]
-    runs-on: ${{ matrix.os }}
+  build-macos-arm64:
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,25 +77,67 @@ jobs:
         run: |
           cd dist
           if [ -d "MasterVPN.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS-${{ runner.arch }}.zip
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS-ARM64.zip
           else
-            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS-${{ runner.arch }}.zip
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS-ARM64.zip
           fi
 
       - name: Verify output
-        run: ls -lh MasterVPN-macOS-${{ runner.arch }}.zip
+        run: ls -lh MasterVPN-macOS-ARM64.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build-${{ runner.arch }}
-          path: MasterVPN-macOS-${{ runner.arch }}.zip
+          name: macos-build-ARM64
+          path: MasterVPN-macOS-ARM64.zip
+          if-no-files-found: error
+
+  build-macos-x86:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_macos_x86 == true }}
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build app bundle
+        run: python build_app.py --clean
+
+      - name: Create zip
+        run: |
+          cd dist
+          if [ -d "MasterVPN.app" ]; then
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN.app ../MasterVPN-macOS-X64.zip
+          else
+            ditto -c -k --sequesterRsrc --keepParent MasterVPN ../MasterVPN-macOS-X64.zip
+          fi
+
+      - name: Verify output
+        run: ls -lh MasterVPN-macOS-X64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build-X64
+          path: MasterVPN-macOS-X64.zip
           if-no-files-found: error
 
   release:
     needs:
       - build-windows
-      - build-macos
+      - build-macos-arm64
+      - build-macos-x86
+    if: always() && needs.build-windows.result == 'success' && needs.build-macos-arm64.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Determine tag
@@ -113,9 +157,11 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          cp dist/windows-build/MasterVPN.exe release/MasterVPN-Windows-x64.exe
-          cp dist/macos-build-X64/MasterVPN-macOS-X64.zip release/MasterVPN-macOS-Intel.zip
-          cp dist/macos-build-ARM64/MasterVPN-macOS-ARM64.zip release/MasterVPN-macOS-Silicon.zip
+          cp dist/windows-build/MasterVPN.exe release/MasterVPN-Windows-x64.exe || true
+          cp dist/macos-build-ARM64/MasterVPN-macOS-ARM64.zip release/MasterVPN-macOS-Silicon.zip || true
+          if [ -f dist/macos-build-X64/MasterVPN-macOS-X64.zip ]; then
+            cp dist/macos-build-X64/MasterVPN-macOS-X64.zip release/MasterVPN-macOS-Intel.zip
+          fi
           echo "=== Release files ==="
           ls -lh release/
 
@@ -134,7 +180,7 @@ jobs:
             |----------|------|
             | Windows x64 | `MasterVPN-Windows-x64.exe` |
             | macOS (Apple Silicon) | `MasterVPN-macOS-Silicon.zip` |
-            | macOS (Intel) | `MasterVPN-macOS-Intel.zip` |
+            | macOS (Intel) | `MasterVPN-macOS-Intel.zip` (if built) |
 
             ### First Run
             - **Windows**: Click More info then Run anyway if SmartScreen appears
@@ -146,6 +192,4 @@ jobs:
             - MITM certificate management
             - Real-time traffic stats and logs
           files: |
-            release/MasterVPN-Windows-x64.exe
-            release/MasterVPN-macOS-Silicon.zip
-            release/MasterVPN-macOS-Intel.zip
+            release/*
