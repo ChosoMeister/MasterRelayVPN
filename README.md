@@ -10,6 +10,22 @@ A free tool that lets you access the internet freely by hiding your traffic behi
 
 ---
 
+## 🖥️ Desktop Application (New!)
+
+We now offer a user-friendly Desktop App with a modern GUI for Windows and macOS. You no longer need to use the terminal!
+
+- **[Download the latest release for Windows and macOS here](https://github.com/masterking32/MasterHttpRelayVPN/releases)**
+
+**Features of the GUI:**
+- Simple 1-click connect/disconnect
+- Interactive setup wizard for your Apps Script `Code.gs`
+- Built-in certificate manager (1-click install/check)
+- Live connection logs and status monitoring
+
+*(Note for macOS users: If you get an "Application is damaged" error when opening the downloaded app, open your Terminal and run `sudo xattr -cr /Applications/MasterVPN.app`)*
+
+---
+
 ## Announcement and Support Channel 📢
 
 For the latest news, releases, and project updates, follow our Telegram channel: [Telegram Channel](https://t.me/masterdnsvpn)
