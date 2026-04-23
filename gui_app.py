@@ -325,9 +325,10 @@ class ProxyBridge:
                 file_types=("Certificate Files (*.crt;*.pem)", "All Files (*.*)"),
             )
             if dest:
+                dest_path = dest[0] if isinstance(dest, (list, tuple)) else dest
                 import shutil
-                shutil.copy2(CA_CERT_FILE, dest)
-                return {"success": True, "path": str(dest)}
+                shutil.copy2(CA_CERT_FILE, dest_path)
+                return {"success": True, "path": str(dest_path)}
             return {"success": False, "error": "Cancelled"}
         except Exception as e:
             return {"success": False, "error": str(e)}
