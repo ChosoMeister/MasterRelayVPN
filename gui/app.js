@@ -19,6 +19,7 @@ const app = {
   async init() {
     this.setupTabs();
     this.setupScriptIdInput();
+    i18n.init();
     await this.loadConfig();
     await this.checkCert();
     this.startPolling();
@@ -94,12 +95,12 @@ const app = {
       if (result && result.success) {
         this.config = cfg;
         this.updateProxyInfo(cfg);
-        this.toast('Settings saved successfully', 'success');
+        this.toast(i18n.t('toast.settingsSaved'), 'success');
       } else {
-        this.toast(result?.error || 'Failed to save settings', 'error');
+        this.toast(result?.error || i18n.t('toast.settingsFailed'), 'error');
       }
     } catch (e) {
-      this.toast('Failed to save settings', 'error');
+      this.toast(i18n.t('toast.settingsFailed'), 'error');
     }
   },
 
@@ -126,7 +127,7 @@ const app = {
 
   async resetConfig() {
     await this.loadConfig();
-    this.toast('Settings reset to saved values', 'info');
+    this.toast(i18n.t('toast.settingsReset'), 'info');
   },
 
   // ── Script IDs Management ───────────────────────────────────
@@ -158,7 +159,7 @@ const app = {
     if (!val) return;
 
     if (this.scriptIds.includes(val)) {
-      this.toast('This Deployment ID is already added', 'error');
+      this.toast(i18n.t('toast.duplicateId'), 'error');
       return;
     }
 
@@ -229,7 +230,7 @@ const app = {
   async saveAuthKeyAndCopyCode() {
     const authKey = document.getElementById('setup-auth-key').value.trim();
     if (!authKey) {
-      this.toast('Enter an Auth Key first', 'error');
+      this.toast(i18n.t('toast.enterAuthKey'), 'error');
       return;
     }
 
@@ -248,13 +249,13 @@ const app = {
     // Get Code.gs with auth key embedded
     let code = await this.api('get_code_gs', authKey);
     if (!code) {
-      this.toast('Could not generate Code.gs', 'error');
+      this.toast(i18n.t('toast.codeGsFailed'), 'error');
       return;
     }
 
     // Copy to clipboard
     await this.writeClipboard(code);
-    this.toast('Auth Key saved & Code.gs copied to clipboard!', 'success');
+    this.toast(i18n.t('toast.authKeySaved'), 'success');
   },
 
   addScriptIdFromSetup() {
@@ -263,7 +264,7 @@ const app = {
     if (!val) return;
 
     if (this.scriptIds.includes(val)) {
-      this.toast('This Deployment ID is already added', 'error');
+      this.toast(i18n.t('toast.duplicateId'), 'error');
       return;
     }
 
@@ -325,11 +326,11 @@ const app = {
         this.setConnected(true);
         this.connectTime = Date.now();
         this.startUptime();
-        this.toast('Connected successfully', 'success');
+        this.toast(i18n.t('toast.connected'), 'success');
       } else {
         this.setConnecting(false);
         this.setConnected(false);
-        this.toast(result?.error || 'Failed to connect', 'error');
+        this.toast(result?.error || i18n.t('toast.connectFailed'), 'error');
       }
     } catch (e) {
       this.setConnecting(false);
@@ -345,7 +346,7 @@ const app = {
       await this.api('stop_proxy');
       this.setConnected(false);
       this.stopUptime();
-      this.toast('Disconnected', 'info');
+      this.toast(i18n.t('toast.disconnected'), 'info');
     } catch (e) {
       this.toast('Disconnect failed: ' + e.message, 'error');
     }
@@ -369,11 +370,11 @@ const app = {
       ring.classList.remove('active');
       icon.classList.add('connecting');
       icon.classList.remove('connected');
-      status.textContent = 'Connecting...';
+      status.textContent = i18n.t('home.connecting');
       status.classList.add('connecting');
       status.classList.remove('connected');
       dot.className = 'status-dot connecting';
-      label.textContent = 'Connecting...';
+      label.textContent = i18n.t('sidebar.connecting');
     }
   },
 
@@ -397,24 +398,24 @@ const app = {
 
     if (state) {
       btn.classList.add('connected');
-      btnText.textContent = 'Disconnect';
+      btnText.textContent = i18n.t('home.disconnect');
       ring.classList.add('active');
       icon.classList.add('connected');
-      status.textContent = 'Connected';
+      status.textContent = i18n.t('home.connected');
       status.classList.add('connected');
       card.classList.add('connected');
       dot.className = 'status-dot connected';
-      label.textContent = 'Connected';
+      label.textContent = i18n.t('sidebar.connected');
     } else {
       btn.classList.remove('connected');
-      btnText.textContent = 'Connect';
+      btnText.textContent = i18n.t('home.connect');
       ring.classList.remove('active');
       icon.classList.remove('connected');
-      status.textContent = 'Disconnected';
+      status.textContent = i18n.t('home.disconnected');
       status.classList.remove('connected');
       card.classList.remove('connected');
       dot.className = 'status-dot disconnected';
-      label.textContent = 'Disconnected';
+      label.textContent = i18n.t('sidebar.disconnected');
       this.resetStats();
     }
   },
@@ -471,7 +472,7 @@ const app = {
         if (status && !status.running && this.connected) {
           this.setConnected(false);
           this.stopUptime();
-          this.toast('Proxy stopped unexpectedly', 'error');
+          this.toast(i18n.t('toast.proxyStopped'), 'error');
         }
       } catch (e) {
         // silently ignore
@@ -553,7 +554,7 @@ const app = {
     try {
       const result = await this.api('download_cert');
       if (result && result.success) {
-        this.toast('Certificate saved: ' + (result.path || 'MasterVPN-CA.crt'), 'success');
+        this.toast(i18n.t('toast.copied') + ': ' + (result.path || 'MasterVPN-CA.crt'), 'success');
       } else if (result?.error === 'Cancelled') {
         // user cancelled — do nothing
       } else {
@@ -569,7 +570,7 @@ const app = {
     try {
       const result = await this.api('regenerate_cert');
       if (result && result.success) {
-        this.toast('New certificate generated successfully', 'success');
+        this.toast(i18n.t('toast.certGenerated'), 'success');
         this.updateCertUI({ exists: true, trusted: false, cn: result.cn, expiry: result.expiry, fingerprint: result.fingerprint });
       } else {
         this.toast(result?.error || 'Regeneration failed', 'error');
@@ -583,7 +584,7 @@ const app = {
     try {
       const result = await this.api('install_cert');
       if (result && result.success) {
-        this.toast('Certificate installed successfully', 'success');
+        this.toast(i18n.t('toast.certInstalled'), 'success');
         this.checkCert(); // refresh full state
       } else {
         this.toast(result?.error || 'Certificate installation failed', 'error');
@@ -621,20 +622,20 @@ const app = {
 
     if (!result.exists) {
       icon.className = 'cert-icon not-generated';
-      title.textContent = 'No Certificate';
-      detail.textContent = result.error || 'Click "Regenerate" to create a new certificate';
+      title.textContent = i18n.t('cert.noCert');
+      detail.textContent = result.error || i18n.t('cert.noCertDetail');
       if (details) details.style.display = 'none';
       return;
     }
 
     if (result.trusted) {
       icon.className = 'cert-icon trusted';
-      title.textContent = 'Certificate Trusted';
-      detail.textContent = 'MITM CA is installed and trusted by the system';
+      title.textContent = i18n.t('cert.trusted');
+      detail.textContent = i18n.t('cert.trustedDetail');
     } else {
       icon.className = 'cert-icon not-trusted';
-      title.textContent = 'Certificate Not Trusted';
-      detail.textContent = 'Download and install the certificate using the guide below';
+      title.textContent = i18n.t('cert.notTrusted');
+      detail.textContent = i18n.t('cert.notTrustedDetail');
     }
 
     // Show cert details
@@ -727,7 +728,7 @@ const app = {
 
   async copyToClipboard(id) {
     await this.writeClipboard(id);
-    this.toast('Copied to clipboard', 'success');
+    this.toast(i18n.t('toast.copied'), 'success');
   },
 
   async writeClipboard(payload) {

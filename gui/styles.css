@@ -1553,3 +1553,146 @@ code.block-code {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Language Switch Button ────────────────────────────────── */
+
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.lang-switch:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-secondary);
+}
+
+/* ── RTL Support ───────────────────────────────────────────── */
+
+html[dir="rtl"] {
+  font-family: 'Vazirmatn', 'Inter', Tahoma, sans-serif;
+}
+
+html[dir="rtl"] #sidebar {
+  border-right: none;
+  border-left: 1px solid var(--border-primary);
+}
+
+html[dir="rtl"] .nav-item {
+  text-align: right;
+}
+
+html[dir="rtl"] .step-number {
+  margin-right: 0;
+  margin-left: 16px;
+}
+
+html[dir="rtl"] .setup-step {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .setup-step .step-content {
+  text-align: right;
+}
+
+html[dir="rtl"] .setup-instructions {
+  padding-right: 20px;
+  padding-left: 0;
+}
+
+html[dir="rtl"] .settings-header {
+  text-align: right;
+}
+
+html[dir="rtl"] .group-title {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .form-field label {
+  text-align: right;
+}
+
+html[dir="rtl"] .input-with-toggle .toggle-visibility {
+  right: auto;
+  left: 8px;
+}
+
+html[dir="rtl"] .input-with-toggle input {
+  padding-right: 14px;
+  padding-left: 42px;
+}
+
+html[dir="rtl"] .script-id-tag {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .proxy-row {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .stat-card {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+html[dir="rtl"] .cert-status-card {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+html[dir="rtl"] .cert-actions {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .cert-help {
+  text-align: right;
+}
+
+html[dir="rtl"] .cert-help ul {
+  padding-right: 20px;
+  padding-left: 0;
+}
+
+html[dir="rtl"] .logs-header {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .logs-actions {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .log-line {
+  direction: ltr;
+  text-align: left;
+}
+
+html[dir="rtl"] .settings-actions {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .toast {
+  direction: rtl;
+}
+
+html[dir="rtl"] .connection-indicator {
+  flex-direction: row-reverse;
+}
+
+html[dir="rtl"] .setup-tip {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+html[dir="rtl"] .guide-tabs {
+  flex-direction: row-reverse;
+}
+
