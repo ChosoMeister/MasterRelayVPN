@@ -8,7 +8,7 @@ overridden from `config.json` where noted.
 from __future__ import annotations
 
 # ── Version ───────────────────────────────────────────────────────────────
-__version__ = "1.1.7"
+__version__ = "1.1.8"
 
 
 # ── Path resolution ───────────────────────────────────────────────────────

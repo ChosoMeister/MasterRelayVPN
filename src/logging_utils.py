@@ -178,10 +178,14 @@ class PrettyFormatter(logging.Formatter):
                 tb = f"{DIM}{FG_GRAY}{tb}{RESET}"
             line = f"{line}\n{tb}"
         if record.stack_info:
-            si = record.stack_info
+            info = self.formatStack(record.stack_info)
             if self.use_color:
-                si = f"{DIM}{FG_GRAY}{si}{RESET}"
-            line = f"{line}\n{si}"
+                info = f"{DIM}{FG_GRAY}{info}{RESET}"
+            line = f"{line}\n{info}"
+            
+        if not self.use_unicode:
+            line = line.replace("→", "->")
+            line = line.encode("ascii", "replace").decode("ascii")
 
         return line
 
